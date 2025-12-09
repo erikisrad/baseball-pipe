@@ -19,34 +19,40 @@ def cors_headers(content_type):
         "Access-Control-Allow-Headers": "*"
     }
 
-def serve_homepage(request: web.Request):
-    logger.info("serving homepage")
+async def serve_gamePK(base_url, gamePK):
+     logger.info(f"processing gamePK: {gamePK}")
 
-    # increase font-size while keeping monospace character widths predictable
-    style = ' style="white-space: pre; font-family: monospace; font-size:18px; line-height:1.2;"'
+async def serve_date(base_url, date_str=None):
+    logger.info(f"processing date_str: {date_str}")
+
     ind = 12
     AT = " at "
 
-    scheme = request.scheme
-    host = request.host
-    base_url = f"{scheme}://{host}/"
-    rel_path = request.match_info['date']
-
-    if rel_path and rel_path.isdigit() and len(rel_path) == 8:
-        date = u.get_date(date_str=rel_path)
-        games = baseball_pipe.mlb_stats.get_games_on_date(date=date)
+    if date_str:
+        date = u.get_date(start_date=date_str)
+        result = await baseball_pipe.mlb_stats.get_games_on_date(start_date=date)
+        if isinstance(result, dict) and not result:  # empty dict means no games
+            games = []
+        else:
+            date, games = result
 
     else:
-        date, games = baseball_pipe.mlb_stats.search_for_last_gameday()
-
+        days_ago = 60
+        start_date = u.get_date()
+        end_date = u.get_date(start_date=start_date, days_ago=days_ago)
+        result = await baseball_pipe.mlb_stats.get_games_on_date(start_date=start_date, 
+                                                                      end_date=end_date)
+        if isinstance(result, dict) and not result:  # empty dict means no games
+            games = []
+            date = u.get_date()  # use today's date
+        else:
+            date, games = result
+        
     yesterday = (date - u.timedelta(days=1)).strftime("%Y%m%d")
     tomorrow = (date + u.timedelta(days=1)).strftime("%Y%m%d")
 
     btn_width = 4
-    # make buttons inline-block with explicit width in ch so they occupy a predictable
-    # number of characters and don't affect centering when font-size changes
-    # make button text inherit the page font-size so scaling is consistent
-    # use inline-flex and center alignment to ensure glyphs are centered
+
     btn_style = (
         f'width:{btn_width}ch;'
         "padding:0.35ch;"
@@ -77,11 +83,27 @@ def serve_homepage(request: web.Request):
         <head>
             <meta charset="utf-8" />
             <title>Baseball Pipe</title>
+            <style>
+                p {{
+                    white-space: pre;
+                    font-family: monospace;
+                    font-size: 18px;
+                    line-height: 2;
+                    margin: 0;
+                }}
+                body a {{
+                    text-decoration: none;
+                    color: blue;
+                }}
+                body a:hover {{
+                    text-decoration: none;
+                    color: inherit;
+                }}
+            </style>
         </head>
         <body>"""
 
     pairs = []
-
     for game in games:
         hn = game["teams"]["home"]["team"]["name"]
         hw = game["teams"]["home"]["leagueRecord"]["wins"]
@@ -89,6 +111,7 @@ def serve_homepage(request: web.Request):
         an = game["teams"]["away"]["team"]["name"]
         aw = game["teams"]["away"]["leagueRecord"]["wins"]
         al = game["teams"]["away"]["leagueRecord"]["losses"]
+        pk = game["gamePk"]
 
         left = f"({aw}-{al}) {an}"
         right = f"{hn} ({hw}-{hl})"
@@ -97,19 +120,32 @@ def serve_homepage(request: web.Request):
         left_width = max(len(left) for left, _ in pairs)
         right_width = max(len(right) for _, right in pairs)
 
-    # account for the two buttons which occupy btn_width characters each
-    total_width = left_width + len(AT) + right_width - (btn_width * 2)
+    if games:
+        # account for the two buttons which occupy btn_width characters each
+        total_width = left_width + len(AT) + right_width - (btn_width * 2)
 
-    html = html + (
-        f"\n{' '*ind}<p{style}><strong>"
-        f"{yesterday_btn}"
-        f"{p_date:^{total_width}}"
-        f"{tomorrow_btn}</strong></p>"
-    )
+        html = html + (
+            f"\n{' '*ind}<p><strong>"
+            f"{yesterday_btn}"
+            f"{p_date:^{total_width}}"
+            f"{tomorrow_btn}</strong></p>"
+        )
 
-    for left, right in pairs:
-        padded_left = left.rjust(left_width)
-        html = html + f"\n{' '*ind}<p{style}>{padded_left}{AT}{right}</p>"
+        for left, right in pairs:
+            padded_left = left.rjust(left_width)
+            link = f'<a href="{base_url}{pk}">'
+            html = html + f"\n{' '*ind}<p>{link}{padded_left}{AT}{right}</a></p>"
+
+    else:
+        total_width = len(p_date) + 4
+        no_games = "No games scheduled."
+        html = html + (
+            f"\n{' '*ind}<p><strong>"
+            f"{yesterday_btn}"
+            f"{p_date:^{total_width}}"
+            f"{tomorrow_btn}</strong></p>"
+            f"\n{' '*ind}<p>{no_games:^{total_width+(btn_width * 2)}}</p>"
+        )
 
     html = html + """
         </body>
@@ -120,6 +156,30 @@ def serve_homepage(request: web.Request):
             "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Headers": "*"
     })
+
+async def decide_serve(request: web.Request):
+    if request.path == "/favicon.ico":
+        logger.info(f"favicon.ico requested, returning 404 to {request.host}")
+        return web.Response(status=404)
+    
+    scheme = request.scheme
+    host = request.host
+    base_url = f"{scheme}://{host}/"
+    rel_path = request.match_info['arg']
+
+    if rel_path and rel_path.isdigit() and len(rel_path) == 8:
+        logger.info(f"serving date for {rel_path}")
+        return await serve_date(base_url, rel_path)
+
+    elif rel_path and rel_path.isdigit() and len(rel_path) == 6:
+        logger.info(f"serving gamePK for {rel_path}")
+        return await serve_gamePK(base_url, rel_path)
+
+    else:
+        logger.info(f"serving current date for arg ({rel_path})")
+        return await serve_date(base_url)
+
+
 
 async def serve_playlist(request):
     logger.info("Incoming request:", request.method, request.path)
@@ -145,7 +205,7 @@ class WebServer:
         self.app = web.Application()
 
     def start(self):
-        self.app.router.add_get("/{date:.*}", serve_homepage)
+        self.app.router.add_get("/{arg:.*}", decide_serve)
         self.app.router.add_get("/segments/{filename:.*}", serve_segment)
         self.app.router.add_get("/local.m3u8", serve_playlist)
 
