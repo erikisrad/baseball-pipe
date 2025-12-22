@@ -47,6 +47,9 @@ class WebServer:
 
     async def decide_serve(self, request: web.Request):
         client_ip = request.remote or "unknown"
+        if client_ip != "192.168.0.157" and client_ip != "192.168.0.206":
+            logger.warning("!!!!!hit!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+            
         logger.info(f"Received request from {client_ip}: {request.method} {request.path}")
 
         if request.method == "OPTIONS":
@@ -64,8 +67,12 @@ class WebServer:
         # Check for gamePK/mediaId format (e.g., 777654/88c67daa-25e5-4737-9189-6e2295e12661)
         if '/' in rel_path:
             parts = rel_path.split('/')
+
+            if len(parts) == 2 and parts[0].isdigit() and len(parts[0]) == 6 and len(parts[1]) == 36:
+                logger.info(f"serving stream landing for gamePK {parts[0]} and mediaId {parts[1]}")
+                return await self.serve_stream_landing(base_url, parts[0], parts[1])
             
-            if len(parts ) == 3 and parts[0].isdigit() and len(parts[0]) == 6 and len(parts[1]) == 36:
+            elif len(parts ) == 3 and parts[0].isdigit() and len(parts[0]) == 6 and len(parts[1]) == 36:
 
                 if parts[2] == "master.m3u8":
                     logger.info(f"serving master playlist for gamePK {parts[0]} and mediaId {parts[1]}")
@@ -115,6 +122,115 @@ class WebServer:
                 "Access-Control-Allow-Headers": "*"
             }
         )
+    
+    async def serve_stream_landing(self, base_url, gamePK, mediaId):
+        logger.info(f"processing stream landing for gamepk {gamePK}, mediaID {mediaId}")
+
+        game = await baseball_pipe.mlb_stats.get_game_content(gamePK)
+        broadcasts = game["broadcasts"]
+
+        selected_broadcast = None
+        for broadcast in broadcasts:
+            if broadcast.get("mediaId", None) == mediaId:
+                selected_broadcast = broadcast
+                break
+
+        hn = game["teams"]["home"]["team"]["name"]
+        an = game["teams"]["away"]["team"]["name"]
+        date = u.get_date(start_date=game["officialDate"])
+        p_date = u.pretty_print_date(date)
+        venue = game["venue"]["name"]
+        series_length = game.get('gamesInSeries', None)
+        series_game_number = game.get('seriesGameNumber', None)
+        if series_length and series_game_number:
+            series_string = f", Game {series_game_number} of {series_length}"
+        else:
+            series_string = ""
+        series_description = f"{game['seriesDescription']}" if "series" in game['seriesDescription'].lower() or not series_string else f"{game['seriesDescription']} Series"
+        game_description = game['ifNecessaryDescription']
+        day_night = game['dayNight'].capitalize()
+
+        video_url = f"{base_url}{gamePK}/{mediaId}/master.m3u8"
+
+        html = f"""<!doctype html>
+        <html>
+            <head>
+                <meta charset="utf-8" />
+                <title>Baseball Pipe</title>
+                <style>
+                    p {{
+                        white-space: pre;
+                        font-family: monospace;
+                        font-size: 18px;
+                        margin: 0;
+                    }}
+                    body a {{
+                        text-decoration: none;
+                        color: blue;
+                    }}
+                    body a:hover {{
+                        text-decoration: none;
+                        color: inherit;
+                    }}
+                    table {{
+                        border-collapse: collapse;
+                        font-family: monospace;
+                        font-size: 18px;
+                        display: grid;
+                    }}
+                    th, td {{
+                        border: 1px solid #ddd;
+                        padding: 8px;
+                        text-align: left;
+                        white-space: pre;
+                    }}
+                    th {{ background-color: #f2f2f2; }}
+                </style>
+            </head>
+            <body>
+                <p>{p_date}</p>
+                <p>\n</p>
+                <p>{an}{AT}{hn}</p>
+                <p>{day_night}time at {venue}</p>
+                <p>{series_description}{series_string}</p>
+                <p>\n</p>
+                <p>Broadcast via {selected_broadcast['name']}</p>
+                <p>\n</p>"""
+        
+        if not self.account:
+            self.account = baseball_pipe.mlbtv_account.Account()
+
+        if not self.token:
+            self.token = await self.account.get_token()
+        
+        if f"{gamePK}/{mediaId}" not in self.streams:
+            self.streams[f"{gamePK}/{mediaId}"] = baseball_pipe.mlbtv_stream.Stream(self.token, gamePK, mediaId)
+
+        try:
+            master_playlist_url = await self.streams[f"{gamePK}/{mediaId}"].get_master_playlist_url()
+            assert "m3u8" in master_playlist_url
+        except Exception as err:
+            logger.error(f"error getting master playlist url for {gamePK}/{mediaId}: {err}")
+
+        errors = self.streams[f"{gamePK}/{mediaId}"].get_errors()
+        if errors:
+            html = html + f'<p><strong>Stream Error: {errors[0]["message"]}</strong></p>'
+        elif selected_broadcast['type'] == "AM" or selected_broadcast['type'] == "FM":
+            html = html + f'<audio src="{video_url}" controls autoplay></audio>'
+        else:
+            html = html + f'<video src="{video_url}" width="400" controls autoplay></video>'
+
+
+        html += f"""
+                <p><a href="{base_url}{u.machine_print_date(date)}">\n<-- back</a></p>
+            </body>
+        </html>
+        """
+
+        return web.Response(text=html, content_type="text/html", headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "*"
+        })
     
     async def serve_media_playlist(self, base_url, gamePK, mediaId, playlist):
         logger.info(f"processing {playlist} playlist for gamePK {gamePK}, mediaId: {mediaId}")
@@ -216,13 +332,14 @@ class WebServer:
                         border: 1px solid #ddd;
                         padding: 8px;
                         text-align: left;
+                        white-space: pre;
                     }}
                     th {{ background-color: #f2f2f2; }}
                 </style>
             </head>
             <body>
-                <p>{an}{AT}{hn}</p>
                 <p>{p_date}</p>
+                <p>\n{an}{AT}{hn}</p>
                 <p>{day_night}time at {venue}</p>
                 <p>{series_description}{series_string}</p>
                 <p>\n</p>
@@ -236,14 +353,19 @@ class WebServer:
                     </tr>"""
         
         for broadcast in broadcasts:
-            html += f"""\n
-                    <tr>
-                        <td><a href="{base_url}{gamePK}/{broadcast['mediaId']}/master.m3u8">{broadcast['name']}</a></td>
-                        <td>{broadcast.get('type', 'N/A')}</td>
-                        <td>{broadcast.get('language', 'N/A')}</td>
-                        <td>{broadcast['availability'].get('availabilityText', 'N/A')}</td>
-                        <td>{broadcast.get('homeAway', 'N/A')}</td>
-                    </tr>"""
+            try:
+                if broadcast['mediaState']['mediaStateId'] != 1:
+                    html += f"""\n
+                            <tr>
+                                <td><a href="{base_url}{gamePK}/{broadcast['mediaId']}">{broadcast['name']}</a></td>
+                                <td>{broadcast.get('type', 'N/A')}</td>
+                                <td>{broadcast.get('language', 'N/A')}</td>
+                                <td>{broadcast['availability'].get('availabilityText', 'N/A')}</td>
+                                <td>{broadcast.get('homeAway', 'N/A')}</td>
+                            </tr>"""
+            except Exception as err:
+                logger.error(f"error processing broadcast {broadcast}\n{err}")
+
         html += f"""
                 </table>
                 <p><a href="{base_url}{u.machine_print_date(date)}">\n<-- back</a></p>
@@ -282,21 +404,6 @@ class WebServer:
         yesterday = (date - u.timedelta(days=1)).strftime("%Y%m%d")
         tomorrow = (date + u.timedelta(days=1)).strftime("%Y%m%d")
 
-        btn_width = 4
-
-        # btn_style = (
-        #     f'width:{btn_width}ch;'
-        #     "padding:0.35ch;"
-        #     "font-family:monospace;"
-        #     "font-size:inherit;"
-        #     "text-align:center;"
-        #     "box-sizing:border-box;"
-        #     "display:inline-flex;"
-        #     "align-items:center;"
-        #     "justify-content:center;"
-        #     "height:1.6em;"
-        # )
-
         yesterday_btn = (
             # f'<button style="{btn_style}" '
             f'<button onclick="window.location.href=&quot;{base_url + yesterday}&quot;;">&lt;</button>'
@@ -314,12 +421,11 @@ class WebServer:
             <head>
                 <meta charset="utf-8" />
                 <title>Baseball Pipe</title>
-                <style>
+            <style>
                     p {{
                         white-space: pre;
                         font-family: monospace;
                         font-size: 18px;
-                        line-height: 2;
                         margin: 0;
                     }}
                     body a {{
@@ -330,21 +436,28 @@ class WebServer:
                         text-decoration: none;
                         color: inherit;
                     }}
-                    button {{
-                        width:{btn_width}ch;
-                        padding:0.35ch;
-                        font-family:monospace;
-                        font-size:inherit;
-                        text-align:center;
-                        box-sizing:border-box;
-                        display:inline-flex;
-                        align-items:center;
-                        justify-content:center;
-                        height:1.6em;
+                    table {{
+                        border-collapse: collapse;
+                        font-family: monospace;
+                        font-size: 18px;
+                        display: grid;
                     }}
+                    th, td {{
+                        border: 1px solid #ddd;
+                        padding: 8px;
+                        text-align: left;
+                        white-space: pre;
+                    }}
+                    th {{ background-color: #f2f2f2; }}
                 </style>
-            </head>
-            <body>"""
+                </head>
+                <body>
+                    <table>
+                        <tr>
+                            <th>Game</th>
+                            <th>{u.get_local_datetime()}</th>
+                            <th>State</th>
+                        </tr>"""
 
         pairs = []
         left_width = 0
@@ -356,40 +469,44 @@ class WebServer:
             an = game["teams"]["away"]["team"]["name"]
             aw = game["teams"]["away"]["leagueRecord"]["wins"]
             al = game["teams"]["away"]["leagueRecord"]["losses"]
-            pk = game["gamePk"]
+            
+            gamePK = game["gamePk"]
+            game_date = game.get("gameDate", "Unknown")
+            status = game.get("status", {}).get("detailedState", "Unknown")
 
             left = f"({aw}-{al}) {an}"
             right = f"{hn} ({hw}-{hl})"
+
             left_width = max(left_width, len(left))
             right_width = max(right_width, len(right))
-            pairs.append((left, right, pk))
 
-        if games:
-            # account for the two buttons which occupy btn_width characters each
-            total_width = left_width + len(AT) + right_width - (btn_width * 2)
+            pairs.append((left, right, gamePK, game_date, status))
 
-            html = html + (
-                f"\n{INDENT}<p><strong>"
-                f"{yesterday_btn}"
-                f"{p_date:^{total_width}}"
-                f"{tomorrow_btn}</strong></p>"
-            )
+        html = html + (
+            f"\n{INDENT}<p>"
+            f"{yesterday_btn}"
+            f"  {p_date}  "
+            f"{tomorrow_btn}\n\n</p>"
+        )
 
-            for left, right, pk in pairs:
-                padded_left = left.rjust(left_width)
-                link = f'<a href="{base_url}{pk}">'
-                html = html + f"\n{INDENT}<p>{link}{padded_left}{AT}{right}</a></p>"
+        for left, right, gamePK, game_date, status in pairs:
+            padded_left = left.rjust(left_width)
+            link = f'<a href="{base_url}{gamePK}">'
 
-        else:
-            total_width = len(p_date) + 4
-            no_games = "No games scheduled."
-            html = html + (
-                f"\n{INDENT}<p><strong>"
-                f"{yesterday_btn}"
-                f"{p_date:^{total_width}}"
-                f"{tomorrow_btn}</strong></p>"
-                f"\n{INDENT}<p>{no_games:^{total_width+(btn_width * 2)}}</p>"
-            )
+            html = html + f"""
+                        <tr>
+                            <td>{link}{padded_left}{AT}{right}</a></td>
+                            <td>{u.pretty_print_time_locally(game_date)}</td>
+                            <td>{status}</td>
+                        </tr>"""
+            
+            #html = html + f"\n{INDENT}<p>{link}{padded_left}{AT}{right}</a></p>"
+
+        if not pairs:
+            html = html + f"""
+                        <tr>
+                            <td colspan="999">No Games Scheduled.</td>
+                        </tr>"""
 
         html = html + """
             </body>

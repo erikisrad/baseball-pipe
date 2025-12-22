@@ -52,8 +52,21 @@ def pretty_print_date(date):
 def machine_print_date(date):
     return date.strftime("%Y%m%d")
 
-def pretty_print_time(date):
-    pretty_time = date.strftime("%I:%M %p").lstrip("0")
+def get_local_datetime():
+    now_local = datetime.now().astimezone()
+    offset = now_local.utcoffset() 
+    hours = offset.total_seconds() / 3600 
+    if hours >= 0: 
+        tz_str = f"UTC+{hours:g}" 
+    else: 
+        tz_str = f"UTC{hours:g}" 
+    return tz_str
+
+def pretty_print_time_locally(utc_str):
+    dt_utc = datetime.fromisoformat(utc_str.replace("Z", "+00:00"))
+    dt_local = dt_utc.astimezone()
+
+    pretty_time = dt_local.strftime("%I:%M %p").lstrip("0")
     return pretty_time
 
 def gen_random_string(n):

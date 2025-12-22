@@ -38,6 +38,8 @@ class Stream():
 
     def reset(self):
 
+        self.errors = None
+
         # via _gen_session()
         self._device_id = ""
         self._session_id = None
@@ -63,12 +65,23 @@ class Stream():
             await self.session.close()
         return self._master_playlist
     
+    async def get_master_playlist_url(self):
+        self.session = aiohttp.ClientSession()
+        try:
+            await self._gen_master_playlist_url()
+        finally:
+            await self.session.close()
+        return self._master_playlist_url
+    
     async def get_media_playlist(self, base_url, playlist):
         self.session = aiohttp.ClientSession()
         try:
             return await self._gen_media_playlist(base_url, playlist)
         finally:
             await self.session.close()
+
+    def get_errors(self):
+        return self.errors
 
     async def get_media_file(self, base_url, suffix):
         self.session = aiohttp.ClientSession()
@@ -228,8 +241,13 @@ class Stream():
             res_json = await res.json()
             logger.info(f"response received, status {res.status}")
 
-        self._master_playlist_url = res_json["data"]["initPlaybackSession"]["playback"]["url"]
-        self._upstream_base_url = self._master_playlist_url.rsplit('/', 1)[0] + '/'
+        if "errors" in res_json:
+            self.errors = res_json["errors"]
+            raise Exception(f"Failed to gen master playlist url: {res_json['errors']}")
+        
+        else:
+            self._master_playlist_url = res_json["data"]["initPlaybackSession"]["playback"]["url"]
+            self._upstream_base_url = self._master_playlist_url.rsplit('/', 1)[0] + '/'
 
     async def _gen_master_playlist(self, base_url):
 
