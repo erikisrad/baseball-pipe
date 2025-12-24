@@ -68,7 +68,7 @@ async def get_games_on_date(start_date, end_date=None, session:aiohttp.ClientSes
         "sportId=1",
         f"startDate={end_date}",
         f"endDate={start_date}",
-        #"hydrate=broadcasts(all)"
+        "hydrate=broadcasts(all)"
     ]
 
     schedule_url = SCHEDULE_URL_PREFIX + "&".join(schedule_url_options)# + SCHEDULE_URL_SUFFIX

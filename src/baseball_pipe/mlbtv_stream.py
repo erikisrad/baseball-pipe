@@ -1,4 +1,5 @@
 import logging
+import re
 from .mlbtv_token import Token
 
 from . import utilities as u
@@ -16,13 +17,73 @@ logger = logging.getLogger(__name__)
 def rewrite_playlist_urls(playlist_content, full_url):
     lines = playlist_content.split('\n')
     rewritten = []
-    
+    cued_out = False
+    cue_expected_time = 0
+    cue_elapsed_time = 0
+    cue_measured_time = 0
+
     for line in lines:
+
         if line and not line.startswith('#'):
+            if cued_out:
+                logger.debug(f"skipping ad: {line}")
+            else:
+                logger.debug(f"rewriting URL for line {line}")
                 rewritten.append(full_url + line)
+
+        elif "#EXT-OATCLS-SCTE35:" in line:
+            logger.debug("skipping splice")
+
+        elif "#EXT-X-CUE-OUT-CONT:" in line:
+            try:
+                m = re.search(r"ElapsedTime=([0-9]*\.?[0-9]+)", line)
+                cue_elapsed_time = float(m.group(1))
+                logger.debug(f"cue elapsed time: {cue_elapsed_time}")
+            except Exception as err:
+                logger.warning(f"failed to parse #EXT-X-CUE-OUT-CONT: line {line}\n{err}")
+
+        elif "#EXT-X-CUE-OUT:" in line:
+            if cued_out:
+                logger.warning("received unexpected #EXT-X-CUE-OUT while already cued out")
+
+            cued_out = True
+            try:
+                m = re.search(r"#EXT-X-CUE-OUT:([0-9]*\.?[0-9]+)", line)
+                cue_expected_time = float(m.group(1))
+                logger.debug(f"now cued out for: {cue_expected_time} sec")
+            except Exception as err:
+                logger.warning(f"failed to parse #EXT-X-CUE-OUT: line {line}\n{err}")
+
+        elif "#EXT-X-CUE-IN" in line:
+
+            if not cued_out:
+                logger.warning("received unexpected #EXT-X-CUE-IN without being cued out")
+
+            cued_out = False
+            cue_expected_time = 0
+            cue_elapsed_time = 0
+            cue_measured_time = 0
+            rewritten.append("#EXT-X-DISCONTINUITY") # throw one of these bad boys in there since we fucked with the timeline so much
+            logger.debug("cue ended")
+
+        elif "#EXTINF:" in line and cued_out:
+            try:
+                m = re.search(r"#EXTINF:([0-9]*\.?[0-9]+)", line)
+                cue_measured_time += float(m.group(1))
+                logger.debug(f"cue measured time: {cue_measured_time}")
+            except Exception as err:
+                logger.warning(f"failed to parse cued out #EXTINF: line {line}\n{err}")
+
+        # elif "#EXT-X-PROGRAM-DATE-TIME:" in line:
+        #     logger.debug(f"cutting #EXT-X-PROGRAM-DATE-TIME: line {line}")
+
+        elif cued_out:
+            logger.debug(f"skipping line during ad: {line}")
+
         else:
+            logger.debug(f"keeping line: {line}")
             rewritten.append(line)
-    
+
     return '\n'.join(rewritten)
 
 class Stream():
@@ -46,6 +107,7 @@ class Stream():
 
         # via _gen_master_playlist_url()
         self._master_playlist_url = None
+        self._upstream_base_url = None
 
         # via _gen_master_playlist()
         self._etag = ""

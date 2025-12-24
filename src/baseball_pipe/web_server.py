@@ -214,11 +214,11 @@ class WebServer:
 
         errors = self.streams[f"{gamePK}/{mediaId}"].get_errors()
         if errors:
-            html = html + f'<p><strong>Stream Error: {errors[0]["message"]}</strong></p>'
+            html += f'<p><strong>Stream Error: {errors[0]["message"]}</strong></p>'
         elif selected_broadcast['type'] == "AM" or selected_broadcast['type'] == "FM":
-            html = html + f'<audio src="{video_url}" controls autoplay></audio>'
+            html += f'<audio src="{video_url}" controls autoplay></audio>'
         else:
-            html = html + f'<video src="{video_url}" width="400" controls autoplay></video>'
+            html += f'<video src="{video_url}" width="400" controls autoplay></video>'
 
 
         html += f"""
@@ -455,6 +455,7 @@ class WebServer:
                     <table>
                         <tr>
                             <th>Game</th>
+                            <th>Free Game</th>
                             <th>{u.get_local_datetime()}</th>
                             <th>State</th>
                         </tr>"""
@@ -473,6 +474,14 @@ class WebServer:
             gamePK = game["gamePk"]
             game_date = game.get("gameDate", "Unknown")
             status = game.get("status", {}).get("detailedState", "Unknown")
+            free = False
+
+            for broadcast in game.get("broadcasts", []):
+                if 'Padres' in broadcast['name']:
+                    pass
+                if broadcast.get("freeGame", False):
+                    free = True
+                    break
 
             left = f"({aw}-{al}) {an}"
             right = f"{hn} ({hw}-{hl})"
@@ -480,35 +489,36 @@ class WebServer:
             left_width = max(left_width, len(left))
             right_width = max(right_width, len(right))
 
-            pairs.append((left, right, gamePK, game_date, status))
+            pairs.append((left, right, gamePK, game_date, status, free))
 
-        html = html + (
+        html += (
             f"\n{INDENT}<p>"
             f"{yesterday_btn}"
             f"  {p_date}  "
             f"{tomorrow_btn}\n\n</p>"
         )
 
-        for left, right, gamePK, game_date, status in pairs:
+        for left, right, gamePK, game_date, status, free in pairs:
             padded_left = left.rjust(left_width)
-            link = f'<a href="{base_url}{gamePK}">'
+            link = f'<td><a href="{base_url}{gamePK}">{padded_left}{AT}{right}</a></td>'
 
-            html = html + f"""
+            html += f"""
                         <tr>
-                            <td>{link}{padded_left}{AT}{right}</a></td>
+                            {link}
+                            <td>{free}</td>
                             <td>{u.pretty_print_time_locally(game_date)}</td>
                             <td>{status}</td>
                         </tr>"""
             
-            #html = html + f"\n{INDENT}<p>{link}{padded_left}{AT}{right}</a></p>"
+            #html += f"\n{INDENT}<p>{link}{padded_left}{AT}{right}</a></p>"
 
         if not pairs:
-            html = html + f"""
+            html += f"""
                         <tr>
                             <td colspan="999">No Games Scheduled.</td>
                         </tr>"""
 
-        html = html + """
+        html += """
             </body>
         </html>
         """
