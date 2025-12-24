@@ -455,7 +455,6 @@ class WebServer:
                     <table>
                         <tr>
                             <th>Game</th>
-                            <th>Free Game</th>
                             <th>{u.get_local_datetime()}</th>
                             <th>State</th>
                         </tr>"""
@@ -500,12 +499,16 @@ class WebServer:
 
         for left, right, gamePK, game_date, status, free in pairs:
             padded_left = left.rjust(left_width)
+
+            if free:
+                padded_left = padded_left.replace("s", "$").replace("S", "$")
+                right = right.replace("s", "$").replace("S", "$")
+
             link = f'<td><a href="{base_url}{gamePK}">{padded_left}{AT}{right}</a></td>'
 
             html += f"""
                         <tr>
                             {link}
-                            <td>{free}</td>
                             <td>{u.pretty_print_time_locally(game_date)}</td>
                             <td>{status}</td>
                         </tr>"""
@@ -519,6 +522,8 @@ class WebServer:
                         </tr>"""
 
         html += """
+                    </table>
+                    <p><br>$ = daily free broadcast</p>
             </body>
         </html>
         """
