@@ -12,7 +12,6 @@ import baseball_pipe.mlbtv_stream
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 INDEX_FILE = os.path.join(SCRIPT_DIR, "index.html")
 LOCAL_PLAYLIST = os.path.join(os.path.dirname(__file__), "local.m3u8")
-INDENT = ' '*12
 AT = " at "
 
 
@@ -416,48 +415,43 @@ class WebServer:
         
         p_date = u.pretty_print_date(date)
 
-        html = f"""<!doctype html>
-        <html>
-            <head>
-                <meta charset="utf-8" />
-                <title>Baseball Pipe</title>
+        html = f"""\
+<!doctype html>
+    <html>
+        <head>
+            <meta charset="utf-8" />
+            <title>Baseball Pipe</title>
             <style>
-                    p {{
-                        white-space: pre;
-                        font-family: monospace;
-                        font-size: 18px;
-                        margin: 0;
-                    }}
-                    body a {{
-                        text-decoration: none;
-                        color: blue;
-                    }}
-                    body a:hover {{
-                        text-decoration: none;
-                        color: inherit;
-                    }}
-                    table {{
-                        border-collapse: collapse;
-                        font-family: monospace;
-                        font-size: 18px;
-                        display: grid;
-                    }}
-                    th, td {{
-                        border: 1px solid #ddd;
-                        padding: 8px;
-                        text-align: left;
-                        white-space: pre;
-                    }}
-                    th {{ background-color: #f2f2f2; }}
-                </style>
-                </head>
-                <body>
-                    <table>
-                        <tr>
-                            <th>Game</th>
-                            <th>{u.get_local_datetime()}</th>
-                            <th>State</th>
-                        </tr>"""
+                p {{
+                    white-space: pre;
+                    font-family: monospace;
+                    font-size: 18px;
+                    margin: 0;
+                }}
+                body a {{
+                    text-decoration: none;
+                    color: blue;
+                }}
+                body a:hover {{
+                    text-decoration: none;
+                    color: inherit;
+                }}
+                table {{
+                    border-collapse: collapse;
+                    font-family: monospace;
+                    font-size: 18px;
+                    display: grid;
+                }}
+                th, td {{
+                    border: 1px solid #ddd;
+                    padding: 8px;
+                    text-align: left;
+                    white-space: pre;
+                }}
+                th {{ background-color: #f2f2f2; }}
+            </style>
+        </head>
+        <body>"""
 
         pairs = []
         left_width = 0
@@ -490,6 +484,8 @@ class WebServer:
 
             pairs.append((left, right, gamePK, game_date, status, free))
 
+        html += """"""
+
         html += (
             f"\n{INDENT}<p>"
             f"{yesterday_btn}"
@@ -497,14 +493,21 @@ class WebServer:
             f"{tomorrow_btn}\n\n</p>"
         )
 
+        html += """
+            <table>
+                <tr>
+                    <th>Game</th>
+                    <th>{u.get_local_datetime()}</th>
+                    <th>State</th>
+                </tr>"""
+
         for left, right, gamePK, game_date, status, free in pairs:
             padded_left = left.rjust(left_width)
 
             if free:
-                padded_left = padded_left.replace("s", "$").replace("S", "$")
-                right = right.replace("s", "$").replace("S", "$")
-
-            link = f'<td><a href="{base_url}{gamePK}">{padded_left}{AT}{right}</a></td>'
+                link = f'<td style="background-color: HoneyDew;"><a href="{base_url}{gamePK}">{padded_left}{AT}{right}</a></td>'
+            else:
+                link = f'<td><a href="{base_url}{gamePK}">{padded_left}{AT}{right}</a></td>'
 
             html += f"""
                         <tr>
@@ -523,7 +526,6 @@ class WebServer:
 
         html += """
                     </table>
-                    <p><br>$ = daily free broadcast</p>
             </body>
         </html>
         """
