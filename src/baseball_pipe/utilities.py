@@ -72,3 +72,18 @@ def pretty_print_time_locally(utc_str):
 def gen_random_string(n):
     """Generate a random string of uppercase letters and digits of length n."""
     return "".join(random.choice(string.ascii_uppercase + string.digits) for _ in range(n))
+
+def get_language(language):
+    languages = {
+        "en":"English",
+        "es":"Spanish",
+        "fr":"French",
+        "de":"German",
+        "it":"Italian",
+        "ja":"Japanese",
+        "ko":"Korean",
+        "zh":"Chinese",
+        "pt":"Portuguese",
+        "ru":"Russian"
+    }
+    return languages.get(language, language)

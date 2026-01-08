@@ -16,7 +16,7 @@ HEADERS = {
 
 async def get_game_content(gamePK, session:aiohttp.ClientSession=None):
 
-    content_url = SCHEDULE_URL_PREFIX + f"gamePk={gamePK}&hydrate=broadcasts(all),game(content(media(all)editorial(all)))"
+    content_url = SCHEDULE_URL_PREFIX + f"gamePk={gamePK}&hydrate=team,broadcasts(all),game(content(media(all)editorial(all)))"
     
     own_session = False
     if session is None:
@@ -36,7 +36,7 @@ async def get_game_content(gamePK, session:aiohttp.ClientSession=None):
         game = res_json["dates"][0]["games"][0]
         broadcasts = game.get("broadcasts", [])
         logger.info(f"found {len(broadcasts)} broadcasts for game {gamePK}")
-        assert len(broadcasts) > 0, f"no broadcasts found for game {gamePK}"
+        #assert len(broadcasts) > 0, f"no broadcasts found for game {gamePK}"
         return game
         
     finally:

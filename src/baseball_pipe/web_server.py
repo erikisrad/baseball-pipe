@@ -90,7 +90,7 @@ class WebServer:
             logger.info(f"serving date for {rel_path}")
             return await self.serve_date(base_url, rel_path)
 
-        elif rel_path and rel_path.isdigit() and len(rel_path) == 6:
+        elif rel_path and rel_path.isdigit() and len(rel_path) <= 8:
             logger.info(f"serving gamePK for {rel_path}")
             return await self.serve_gamePK(base_url, rel_path)
         
@@ -126,7 +126,7 @@ class WebServer:
         logger.info(f"processing stream landing for gamepk {gamePK}, mediaID {mediaId}")
 
         game = await baseball_pipe.mlb_stats.get_game_content(gamePK)
-        broadcasts = game["broadcasts"]
+        broadcasts = game.get("broadcasts", [])
 
         selected_broadcast = None
         for broadcast in broadcasts:
@@ -151,50 +151,52 @@ class WebServer:
 
         video_url = f"{base_url}{gamePK}/{mediaId}/master.m3u8"
 
-        html = f"""<!doctype html>
-        <html>
-            <head>
-                <meta charset="utf-8" />
-                <title>Baseball Pipe</title>
-                <style>
-                    p {{
-                        white-space: pre;
-                        font-family: monospace;
-                        font-size: 18px;
-                        margin: 0;
-                    }}
-                    body a {{
-                        text-decoration: none;
-                        color: blue;
-                    }}
-                    body a:hover {{
-                        text-decoration: none;
-                        color: inherit;
-                    }}
-                    table {{
-                        border-collapse: collapse;
-                        font-family: monospace;
-                        font-size: 18px;
-                        display: grid;
-                    }}
-                    th, td {{
-                        border: 1px solid #ddd;
-                        padding: 8px;
-                        text-align: left;
-                        white-space: pre;
-                    }}
-                    th {{ background-color: #f2f2f2; }}
-                </style>
-            </head>
-            <body>
-                <p>{p_date}</p>
-                <p>\n</p>
-                <p>{an}{AT}{hn}</p>
-                <p>{day_night}time at {venue}</p>
-                <p>{series_description}{series_string}</p>
-                <p>\n</p>
-                <p>Broadcast via {selected_broadcast['name']}</p>
-                <p>\n</p>"""
+        html = f"""\
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <title>Baseball Pipe</title>
+        <style>
+            p {{
+                white-space: pre;
+                font-family: monospace;
+                font-size: 18px;
+                margin: 0;
+            }}
+            body a {{
+                text-decoration: none;
+                color: blue;
+            }}
+            body a:hover {{
+                text-decoration: none;
+                color: inherit;
+            }}
+            table {{
+                border-collapse: collapse;
+                font-family: monospace;
+                font-size: 18px;
+                display: grid;
+            }}
+            th, td {{
+                border: 1px solid #ddd;
+                padding: 8px;
+                text-align: left;
+                white-space: pre;
+            }}
+            th {{ background-color: #f2f2f2; }}
+        </style>
+    </head>
+    <body>
+        <p>{p_date}</p>
+        <br>
+        <p>{an}{AT}{hn}</p>
+        <p>{day_night}time at {venue}</p>
+        <p>{series_description}{series_string}</p>
+        <br>
+        <p>Broadcast via {selected_broadcast['name']}</p>
+        <br>
+"""
         
         if not self.account:
             self.account = baseball_pipe.mlbtv_account.Account()
@@ -213,18 +215,23 @@ class WebServer:
 
         errors = self.streams[f"{gamePK}/{mediaId}"].get_errors()
         if errors:
-            html += f'<p><strong>Stream Error: {errors[0]["message"]}</strong></p>'
+            html += f'''\
+        <p><strong>Stream Error: {errors[0]["message"]}</strong></p>'''
+            
         elif selected_broadcast['type'] == "AM" or selected_broadcast['type'] == "FM":
-            html += f'<audio src="{video_url}" controls autoplay></audio>'
+            html += f'''\
+        <audio src="{video_url}" controls autoplay></audio>'''
+            
         else:
-            html += f'<video src="{video_url}" width="400" controls autoplay></video>'
-
+            html += f'''\
+        <video src="{video_url}" width="400" controls autoplay></video>'''
 
         html += f"""
-                <p><a href="{base_url}{u.machine_print_date(date)}">\n<-- back</a></p>
-            </body>
-        </html>
-        """
+        <br><br>
+        <p><a href="{base_url}{gamePK}"><-- back</a></p>
+    </body>
+</html>
+"""
 
         return web.Response(text=html, content_type="text/html", headers={
             "Access-Control-Allow-Origin": "*",
@@ -284,93 +291,125 @@ class WebServer:
     async def serve_gamePK(self, base_url, gamePK):
         logger.info(f"processing gamePK: {gamePK}")
         game = await baseball_pipe.mlb_stats.get_game_content(gamePK)
-        broadcasts = game["broadcasts"]
+        broadcasts = game.get("broadcasts", [])
 
-        hn = game["teams"]["home"]["team"]["name"]
-        an = game["teams"]["away"]["team"]["name"]
+        home_name = game["teams"]["home"]["team"]["name"]
+        away_name = game["teams"]["away"]["team"]["name"]
+
+        short = {
+            "home":game["teams"]["home"]["team"]["abbreviation"],
+            "away":game["teams"]["away"]["team"]["abbreviation"],
+            "N/A":"N/A"
+        }
+
+
+
         date = u.get_date(start_date=game["officialDate"])
         p_date = u.pretty_print_date(date)
         venue = game["venue"]["name"]
         series_length = game.get('gamesInSeries', None)
         series_game_number = game.get('seriesGameNumber', None)
+
         if series_length and series_game_number:
             series_string = f", Game {series_game_number} of {series_length}"
         else:
             series_string = ""
+
         series_description = f"{game['seriesDescription']}" if "series" in game['seriesDescription'].lower() or not series_string else f"{game['seriesDescription']} Series"
         game_description = game['ifNecessaryDescription']
         day_night = game['dayNight'].capitalize()
 
-        html = f"""<!doctype html>
-        <html>
-            <head>
-                <meta charset="utf-8" />
-                <title>Baseball Pipe</title>
-                <style>
-                    p {{
-                        white-space: pre;
-                        font-family: monospace;
-                        font-size: 18px;
-                        margin: 0;
-                    }}
-                    body a {{
-                        text-decoration: none;
-                        color: blue;
-                    }}
-                    body a:hover {{
-                        text-decoration: none;
-                        color: inherit;
-                    }}
-                    table {{
-                        border-collapse: collapse;
-                        font-family: monospace;
-                        font-size: 18px;
-                        display: grid;
-                    }}
-                    th, td {{
-                        border: 1px solid #ddd;
-                        padding: 8px;
-                        text-align: left;
-                        white-space: pre;
-                    }}
-                    th {{ background-color: #f2f2f2; }}
-                </style>
-            </head>
-            <body>
-                <p>{p_date}</p>
-                <p>\n{an}{AT}{hn}</p>
-                <p>{day_night}time at {venue}</p>
-                <p>{series_description}{series_string}</p>
-                <p>\n</p>
-                <table>
-                    <tr>
-                        <th>Broadcast</th>
-                        <th>Type</th>
-                        <th>Language</th>
-                        <th>Availability</th>
-                        <th>Side</th>
-                    </tr>"""
+        html = f"""\
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <title>Baseball Pipe</title>
+        <style>
+            p {{
+                white-space: pre;
+                font-family: monospace;
+                font-size: 18px;
+                margin: 0;
+            }}
+            body a {{
+                text-decoration: none;
+                color: blue;
+            }}
+            body a:hover {{
+                text-decoration: none;
+                color: inherit;
+            }}
+            table {{
+                border-collapse: collapse;
+                font-family: monospace;
+                font-size: 18px;
+                display: grid;
+            }}
+            th, td {{
+                border: 1px solid #ddd;
+                padding: 8px;
+                text-align: left;
+                white-space: pre;
+            }}
+            th {{ background-color: #f2f2f2; }}
+        </style>
+    </head>
+    <body>
+        <p>{p_date}</p>
+        <br>
+        <p>{away_name}{AT}{home_name}</p>
+        <p>{day_night}time at {venue}</p>
+        <p>{series_description}{series_string}</p>
+        <br>
+"""
         
-        for broadcast in broadcasts:
-            try:
-                if broadcast['mediaState']['mediaStateId'] != 1:
-                    html += f"""\n
-                            <tr>
-                                <td><a href="{base_url}{gamePK}/{broadcast['mediaId']}">{broadcast['name']}</a></td>
-                                <td>{broadcast.get('type', 'N/A')}</td>
-                                <td>{broadcast.get('language', 'N/A')}</td>
-                                <td>{broadcast['availability'].get('availabilityText', 'N/A')}</td>
-                                <td>{broadcast.get('homeAway', 'N/A')}</td>
-                            </tr>"""
-            except Exception as err:
-                logger.error(f"error processing broadcast {broadcast}\n{err}")
+        if broadcasts:
+            html += f"""\
+        <table>
+            <tr>
+                <th>Broadcast</th>
+                <th>Type</th>
+                <th>Side</th>
+                <th>State</th>
+                <th>Language</th>
+                <th>Availability</th>
+            </tr>
+"""
+            for broadcast in broadcasts:
+                try:
+                    media_state_id = broadcast.get('mediaState', {}).get('mediaStateId', 'N/A')
+                    media_state_text = broadcast.get('mediaState', {}).get('mediaStateText', 'N/A')
+                    if media_state_id != 1:
+                        broadcast_str = f'<a href="{base_url}{gamePK}/{broadcast["mediaId"]}">{broadcast["name"]}</a>'
+                    else:
+                        broadcast_str = broadcast['name']
 
-        html += f"""
-                </table>
-                <p><a href="{base_url}{u.machine_print_date(date)}">\n<-- back</a></p>
-            </body>
-        </html>
-        """
+                    html += f"""\
+            <tr>
+                <td>{broadcast_str}</td>
+                <td>{broadcast.get('type', 'N/A')}</td>
+                <td>{short[broadcast.get('homeAway', 'N/A')]}</td>
+                <td>{media_state_text}</td>
+                <td>{u.get_language(broadcast.get('language', 'N/A'))}</td>
+                <td>{broadcast['availability'].get('availabilityText', 'N/A')}</td>
+            </tr>
+"""                    
+
+                except Exception as err:
+                    logger.error(f"error processing broadcast {broadcast}\n{err}")
+
+        else:
+            html += '''\
+            <p><strong>No broadcast info available for this game.</strong></p>
+'''
+
+        html += f"""\
+        </table>
+        <br>
+        <p><a href="{base_url}{u.machine_print_date(date)}"><-- back</a></p>
+    </body>
+</html>"""
 
         return web.Response(text=html, content_type="text/html", headers={
             "Access-Control-Allow-Origin": "*",
@@ -417,41 +456,41 @@ class WebServer:
 
         html = f"""\
 <!doctype html>
-    <html>
-        <head>
-            <meta charset="utf-8" />
-            <title>Baseball Pipe</title>
-            <style>
-                p {{
-                    white-space: pre;
-                    font-family: monospace;
-                    font-size: 18px;
-                    margin: 0;
-                }}
-                body a {{
-                    text-decoration: none;
-                    color: blue;
-                }}
-                body a:hover {{
-                    text-decoration: none;
-                    color: inherit;
-                }}
-                table {{
-                    border-collapse: collapse;
-                    font-family: monospace;
-                    font-size: 18px;
-                    display: grid;
-                }}
-                th, td {{
-                    border: 1px solid #ddd;
-                    padding: 8px;
-                    text-align: left;
-                    white-space: pre;
-                }}
-                th {{ background-color: #f2f2f2; }}
-            </style>
-        </head>
-        <body>"""
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <title>Baseball Pipe</title>
+        <style>
+            p {{
+                white-space: pre;
+                font-family: monospace;
+                font-size: 18px;
+                margin: 0;
+            }}
+            body a {{
+                text-decoration: none;
+                color: blue;
+            }}
+            body a:hover {{
+                text-decoration: none;
+                color: inherit;
+            }}
+            table {{
+                border-collapse: collapse;
+                font-family: monospace;
+                font-size: 18px;
+                display: grid;
+            }}
+            th, td {{
+                border: 1px solid #ddd;
+                padding: 8px;
+                text-align: left;
+                white-space: pre;
+            }}
+            th {{ background-color: #f2f2f2; }}
+        </style>
+    </head>
+    <body>"""
 
         pairs = []
         left_width = 0
@@ -484,22 +523,17 @@ class WebServer:
 
             pairs.append((left, right, gamePK, game_date, status, free))
 
-        html += """"""
+        html += f"""
+    <p>{yesterday_btn}  {p_date}  {tomorrow_btn}</p>
+    <br>"""
 
-        html += (
-            f"\n{INDENT}<p>"
-            f"{yesterday_btn}"
-            f"  {p_date}  "
-            f"{tomorrow_btn}\n\n</p>"
-        )
-
-        html += """
-            <table>
-                <tr>
-                    <th>Game</th>
-                    <th>{u.get_local_datetime()}</th>
-                    <th>State</th>
-                </tr>"""
+        html += f"""
+    <table>
+        <tr>
+            <th>Game</th>
+            <th>{u.get_local_datetime()}</th>
+            <th>State</th>
+        </tr>"""
 
         for left, right, gamePK, game_date, status, free in pairs:
             padded_left = left.rjust(left_width)
@@ -510,25 +544,47 @@ class WebServer:
                 link = f'<td><a href="{base_url}{gamePK}">{padded_left}{AT}{right}</a></td>'
 
             html += f"""
-                        <tr>
-                            {link}
-                            <td>{u.pretty_print_time_locally(game_date)}</td>
-                            <td>{status}</td>
-                        </tr>"""
+        <tr>
+            {link}
+            <td>{u.pretty_print_time_locally(game_date)}</td>
+            <td>{status}</td>
+        </tr>"""
             
             #html += f"\n{INDENT}<p>{link}{padded_left}{AT}{right}</a></p>"
 
         if not pairs:
             html += f"""
-                        <tr>
-                            <td colspan="999">No Games Scheduled.</td>
-                        </tr>"""
+                <tr>
+                    <td colspan="999">No Games Scheduled.</td>
+                </tr>"""
 
         html += """
-                    </table>
-            </body>
-        </html>
-        """
+        </table>
+        <br>
+        <p><input type="date" id="jumpDate"> <a href="#" onclick="jumpToDate()">--></a></p>
+        
+        <script>
+            function jumpToDate() {
+                const input = document.getElementById("jumpDate").value;
+                if (!input) return;
+
+                const formatted = input.replace(/-/g, "");
+                window.location.href = "http://" + location.host + "/" + formatted;
+            }
+
+            (function() {
+                const path = window.location.pathname.replace("/", "");
+                if (path.length === 8 && /^\d+$/.test(path)) {
+                    const yyyy = path.substring(0, 4);
+                    const mm = path.substring(4, 6);
+                    const dd = path.substring(6, 8);
+                    document.getElementById("jumpDate").value = `${yyyy}-${mm}-${dd}`;
+                }
+            })();
+        </script>
+
+    </body>
+</html>"""
 
         return web.Response(text=html, content_type="text/html", headers={
                 "Access-Control-Allow-Origin": "*",
