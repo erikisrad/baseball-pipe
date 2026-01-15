@@ -172,6 +172,17 @@ class WebServer:
                 text-decoration: none;
                 color: inherit;
             }}
+            a[download],
+            a[download]:link,
+            a[download]:visited,
+            a[download]:hover,
+            a[download]:active,
+            a[download]:focus {{
+                white-space: pre;
+                font-family: monospace;
+                font-size: 18px;
+                margin: 0;
+            }}
             table {{
                 border-collapse: collapse;
                 font-family: monospace;
@@ -224,7 +235,9 @@ class WebServer:
             
         else:
             html += f'''\
-        <video src="{video_url}" width="400" controls autoplay></video>'''
+        <video src="{video_url}" width="400" controls autoplay></video>
+        <br><br>
+        <a href="{video_url}" download>download</a>'''
 
         html += f"""
         <br><br>
@@ -560,29 +573,6 @@ class WebServer:
 
         html += """
         </table>
-        <br>
-        <p><input type="date" id="jumpDate"> <a href="#" onclick="jumpToDate()">--></a></p>
-        
-        <script>
-            function jumpToDate() {
-                const input = document.getElementById("jumpDate").value;
-                if (!input) return;
-
-                const formatted = input.replace(/-/g, "");
-                window.location.href = "http://" + location.host + "/" + formatted;
-            }
-
-            (function() {
-                const path = window.location.pathname.replace("/", "");
-                if (path.length === 8 && /^\d+$/.test(path)) {
-                    const yyyy = path.substring(0, 4);
-                    const mm = path.substring(4, 6);
-                    const dd = path.substring(6, 8);
-                    document.getElementById("jumpDate").value = `${yyyy}-${mm}-${dd}`;
-                }
-            })();
-        </script>
-
     </body>
 </html>"""
 
