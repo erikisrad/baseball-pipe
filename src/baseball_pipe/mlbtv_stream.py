@@ -99,8 +99,6 @@ class Stream():
 
     def reset(self):
 
-        self.errors = None
-
         # via _gen_session()
         self._device_id = ""
         self._session_id = None
@@ -142,13 +140,17 @@ class Stream():
         finally:
             await self.session.close()
 
-    def get_errors(self):
-        return self.errors
-
     async def get_media_file(self, base_url, suffix):
         self.session = aiohttp.ClientSession()
         try:
             return await self._gen_media_file(base_url, suffix)
+        finally:
+            await self.session.close()
+
+    async def get_key_file(self, base_url, suffix):
+        self.session = aiohttp.ClientSession()
+        try:
+            return await self._gen_key_file(base_url, suffix)
         finally:
             await self.session.close()
 
@@ -304,8 +306,7 @@ class Stream():
             logger.info(f"response received, status {res.status}")
 
         if "errors" in res_json:
-            self.errors = res_json["errors"]
-            raise Exception(f"Failed to gen master playlist url: {res_json['errors']}")
+            raise Exception(res_json['errors'][0]['message'])
         
         else:
             self._master_playlist_url = res_json["data"]["initPlaybackSession"]["playback"]["url"]
@@ -427,6 +428,49 @@ class Stream():
         async with self.session.get(target, headers=headers, ssl=False) as res:
             logger.info("awaiting response...")
             if res.status != 200:
+                raise Exception(f"Failed to gen {target} file: {res.status} {res.reason}")
+            res_data = await res.read()
+            logger.info(f"response received, status {res.status}")
+        try:
+            self._etag = res.headers['ETag']
+        except Exception:
+            logger.warning("Failed to get ETag from response headers")
+            self._etag = ''
+        
+        return res_data
+    
+    async def _gen_key_file(self, base_url, suffix):
+        
+        if not self._upstream_base_url:
+            await self._gen_master_playlist_url()
+
+        full_url = f"{base_url}{self.game_pk}/{self.media_id}/"
+        target = self._upstream_base_url + suffix
+
+        headers = {
+            "Accept": "*/*",
+            "Accept-Encoding": "identity;q=1, *;q=0",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Cache-Control": "no-cache",
+            #"If-Modified-Since": {last_get},
+            #"If-None-Match": {self._etag},
+            "Pragma": "no-cache",
+            "Priority": "i",
+            "Range": "bytes=0-",
+            #"Referer": "fst.mlb.com/1766168221_MDB1OGRxaDZlZXBlRXlEUmQzNTY_YWxsb3dlZE1lZGlhVHlwZXM9VklERU8sQVVESU8_14681a4b82809b3fc8c860b2f8a9677e609b911cf43d15712fa0ce8a57776b6e/20250808/776825-HD.m3u8"
+            "Sec-Ch-Ua": '"Chromium";v="142", "Google Chrome";v="142", "Not_A Brand";v="99"',
+            "Sec-Ch-Ua-Mobile": "?0",
+            "Sec-Ch-Ua-Platform": '"Windows"',
+            "Sec-Fetch-Dest": "video",
+            "Sec-Fetch-Mode": "no-cors",
+            "Sec-Fetch-Site": "same-origin",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
+        }
+
+        logger.info(f"sending request to {target}")
+        async with self.session.get(target, headers=headers, ssl=False) as res:
+            logger.info("awaiting response...")
+            if res.status not in [200, 206]:
                 raise Exception(f"Failed to gen {target} file: {res.status} {res.reason}")
             res_data = await res.read()
             logger.info(f"response received, status {res.status}")

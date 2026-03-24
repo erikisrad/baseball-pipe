@@ -1,0 +1,409 @@
+/* Universal selector applying to all elements: Sets box-sizing to border-box, ensuring padding and borders are included in width/height calculations, observed in consistent sizing of all webpage elements. */
+* {
+    /* Applies border-box model to all elements, preventing width overflow issues seen throughout the webpage layout. */
+    box-sizing: border-box;
+}
+
+/* Body selector: Defines the overall page styling, observed in the background color, font, and spacing of the entire webpage. */
+body {
+    /* Sets monospace font for all text, observed in the uniform, typewriter-like appearance of all text on the webpage. */
+    font-family: monospace;
+    /* Sets base font size to 16px, observed in the default text size across paragraphs, headers, and table content. */
+    font-size: 16px;
+    /* Removes default body margin, observed in content starting flush with the browser window edges. */
+    margin: 0;
+    /* Adds 12px padding around body content, observed as space between webpage content and browser borders. */
+    padding: 12px;
+    /* Sets light gray background, observed as the main background color of the entire webpage. */
+    background-color: #f9f9f9;
+}
+
+video {
+    display: block;
+    margin: 0 auto;
+    width: 100%;       /* Force it to fill the container width immediately */
+    max-width: 900px;
+    aspect-ratio: 16 / 9; /* Reserves a 16:9 space even if the video is empty */
+    background-color: #000; /* Optional: adds a black box so it's not a white gap */
+    height: auto;
+}
+
+audio {
+    display: block;
+    margin: 0 auto;
+    width: 100%;
+    max-width: 900px;
+    height: 48px;
+}
+
+/* Container class: Centers and constrains main content width, observed in the centered layout of the main content area on the webpage. */
+.container {
+    /* Limits container width to 900px max, observed in content not expanding beyond this width on large screens. */
+    max-width: 900px;
+    /* Centers container with auto margins, observed in the main content being horizontally centered on the webpage. */
+    margin: 0 auto;
+    width: 100%;
+}
+
+/* Header class: Centers header content, observed in the centered title or header text at the top of the webpage. */
+.header {
+    /* Centers text alignment, observed in header text being centered horizontally. */
+    text-align: center;
+    /* Adds bottom margin, observed as space below the header separating it from the date navigation. */
+    margin-bottom: 20px;
+}
+
+/* Date-nav class: Styles the date navigation bar, observed in the horizontal row of date buttons and display at the top of the webpage. */
+.date-nav {
+    /* Enables flexbox layout, observed in the horizontal arrangement of navigation elements. */
+    display: flex;
+    /* Centers items horizontally, observed in navigation buttons and date display being centered. */
+    justify-content: center;
+    /* Centers items vertically, observed in buttons and text aligned in the middle of the navigation bar. */
+    align-items: center;
+    /* Adds 15px gaps between items, observed as spacing between navigation buttons and date display. */
+    gap: 15px;
+    /* Adds bottom margin, observed as space below navigation separating it from the table content. */
+    margin-bottom: 20px;
+    /* Prevents wrapping, observed in navigation staying on one line even on smaller screens. */
+    flex-wrap: nowrap;
+}
+
+/* Date-nav button selector: Styles navigation buttons, observed in the blue buttons for date navigation in the top bar. */
+.date-nav button {
+    /* Adds padding inside buttons, observed in the clickable area size of the navigation buttons. */
+    padding: 8px 12px;
+    /* Sets button font size, observed in the text size on the navigation buttons. */
+    font-size: 16px;
+    /* Changes cursor to pointer, observed when hovering over buttons indicating they're clickable. */
+    cursor: pointer;
+    /* Sets blue background, observed in the color of the navigation buttons. */
+    background-color: #007bff;
+    /* Sets white text color, observed in the text color on the navigation buttons. */
+    color: white;
+    /* Removes border, observed in the clean, borderless appearance of the buttons. */
+    border: none;
+    /* Rounds corners, observed in the slightly rounded edges of the navigation buttons. */
+    border-radius: 4px;
+    /* Adds smooth color transition, observed in the gradual color change when hovering over buttons. */
+    transition: background-color 0.3s;
+    /* Prevents shrinking, observed in buttons maintaining size in the flex layout. */
+    flex-shrink: 0;
+}
+
+/* Date-nav button hover: Changes color on hover, observed when moving mouse over navigation buttons, darkening their color. */
+.date-nav button:hover {
+    /* Darkens background on hover, observed in the color change of buttons when mouse is over them. */
+    background-color: #0056b3;
+}
+
+/* Date-nav button active: Changes color when pressed, observed in the darker color of buttons when clicked. */
+.date-nav button:active {
+    /* Further darkens background when pressed, observed during button clicks. */
+    background-color: #004085;
+}
+
+/* Date-display class: Styles the current date text, observed in the bold, centered date text in the navigation bar. */
+.date-display {
+    /* Sets larger font size, observed in the prominent size of the date display text. */
+    font-size: 18px;
+    /* Makes text bold, observed in the emphasized appearance of the current date. */
+    font-weight: bold;
+    /* Sets minimum width, observed in the date display maintaining width for alignment. */
+    min-width: 150px;
+    /* Centers text, observed in the date text being centered in the navigation. */
+    text-align: center;
+    /* Allows shrinking, observed in date display compressing if needed. */
+    flex-shrink: 1;
+    /* Overrides min-width, observed in adjusted width for the date display. */
+    min-width: 120px;
+}
+
+.date-line {
+    border: none;
+    border-top: 1px solid #ccc;
+    margin: 10px 0 20px 0;
+}
+
+
+/* Paragraph selector: Styles all p elements, observed in the spacing and line height of paragraph text throughout the webpage. */
+p {
+    /* Adds vertical margins, observed as space above and below paragraphs. */
+    margin: 8px 0;
+    /* Increases line height, observed in the spacing between lines of text in paragraphs. */
+    line-height: 1.5;
+}
+
+/* Anchor selector: Styles all links, observed in the blue, non-underlined appearance of hyperlinks on the webpage. */
+a {
+    /* Removes underline, observed in links appearing without default underlines. */
+    text-decoration: none;
+    /* Sets blue color, observed in the color of all hyperlinks. */
+    color: #007bff;
+}
+
+/* Anchor hover: Adds underline on hover, observed when hovering over links, showing underlines. */
+a:hover {
+    /* Adds underline on hover, observed in links gaining underlines when mouse is over them. */
+    text-decoration: underline;
+    /* Darkens color on hover, observed in links changing to darker blue when hovered. */
+    color: #0056b3;
+}
+
+/* Table selector: Styles the main data table, observed in the white, shadowed table displaying game information. */
+table {
+    /* Makes table full width, observed in the table spanning the entire container width. */
+    width: 100%;
+    /* Collapses borders, observed in seamless borders between table cells. */
+    border-collapse: collapse;
+    /* Sets white background, observed in the table's background color contrasting the page. */
+    background-color: white;
+    /* Adds shadow, observed in the subtle drop shadow around the table. */
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    /* Rounds corners, observed in the rounded edges of the table. */
+    border-radius: 4px;
+    /* Hides overflow, observed in content staying within rounded table boundaries. */
+    overflow: hidden;
+}
+
+/* Th selector: Styles table headers, observed in the gray header row at the top of the table. */
+th {
+    /* Sets light gray background, observed in the background color of table column headers. */
+    background-color: #f2f2f2;
+    /* Adds padding, observed as space around header text. */
+    padding: 12px;
+    /* Left-aligns text, observed in header text alignment. */
+    text-align: left;
+    /* Semi-bold weight, observed in slightly emphasized header text. */
+    font-weight: 600;
+    /* Adds bottom border, observed as a line separating headers from data rows. */
+    border-bottom: 2px solid #ddd;
+    /* Smaller font size, observed in header text being slightly smaller than body text. */
+    font-size: 14px;
+}
+
+/* Td selector: Styles table data cells, observed in the content cells of the table rows. */
+td {
+    /* Adds padding, observed as space around cell content. */
+    padding: 12px;
+    /* Adds bottom border, observed as lines separating table rows. */
+    border-bottom: 1px solid #ddd;
+}
+
+/* Td a selector: Centers links in cells, observed in watch/stream links being centered within table cells. */
+.center-links td a {
+    /* Enables flexbox, observed in links being centered horizontally and vertically in cells. */
+    display: flex;
+    /* Vertically centers content, observed in links aligned to the middle of cells. */
+    align-items: center;
+    /* Horizontally centers content, observed in links centered within their cells. */
+    justify-content: center;
+}
+
+/* At class: Adds margins around separators, observed in spacing around "@" symbols in game information. */
+.at {
+    /* Adds horizontal margins, observed as space around separator elements like "@" in game listings. */
+    margin: 0 5px;
+}
+
+/* Left class: Right-aligns and flexes, observed in team names or scores aligned to the right in table cells. */
+.left {
+    /* Right-aligns text, observed in content like away team names aligned to the right. */
+    text-align: right;
+    /* Allows growth, observed in left columns taking available space. */
+    flex: 1;
+}
+
+/* Right class: Left-aligns and flexes, observed in team names or scores aligned to the left in table cells. */
+.right {
+    /* Left-aligns text, observed in content like home team names aligned to the left. */
+    text-align: left;
+    /* Allows growth, observed in right columns taking available space. */
+    flex: 1;
+}
+
+/* Free-game class: Styles free game rows, observed in rows for free games having a distinct background. */
+
+
+/* Free-game second td selector: Centers second column, observed in the second column of free game rows being center-aligned. */
+/* .free-game td:nth-child(2) { */
+    /* Centers text, observed in the middle column of free game rows having centered text. */
+    /* text-align: center; */
+/* } */
+
+/* No-games class: Styles no games message, observed in the centered, gray message when no games are scheduled. */
+.no-games {
+    /* Centers text, observed in the "no games" message being centered on the page. */
+    text-align: center;
+    /* Adds padding, observed as space around the no games message. */
+    padding: 20px;
+    /* Sets gray color, observed in the muted color of the no games text. */
+    color: #666;
+    /* Makes italic, observed in the slanted style of the no games message. */
+    font-style: italic;
+}
+
+/* Media query for tablets: Adjusts styles for screens up to 768px, observed in responsive changes on tablet-sized devices. */
+@media (max-width: 768px) {
+    /* Reduces body padding, observed in tighter spacing around content on tablets. */
+    body {
+        /* Smaller padding, observed in less space between content and screen edges on tablets. */
+        padding: 8px;
+        /* Smaller font size, observed in reduced text size on tablet screens. */
+        font-size: 14px;
+    }
+    /* Adjusts navigation gap, observed in closer spacing of navigation elements on tablets. */
+    .date-nav {
+        /* Smaller gap, observed in navigation buttons being closer together on tablets. */
+        gap: 10px;
+    }
+    /* Smaller button padding, observed in more compact navigation buttons on tablets. */
+    .date-nav button {
+        /* Reduced padding, observed in smaller button sizes on tablets. */
+        padding: 6px 10px;
+        /* Smaller font, observed in smaller button text on tablets. */
+        font-size: 14px;
+    }
+    /* Adjusts date display, observed in smaller date text on tablets. */
+    .date-display {
+        /* Smaller font size, observed in reduced date display size on tablets. */
+        font-size: 16px;
+        /* Flexible width, observed in date display adapting to available space on tablets. */
+        min-width: auto;
+    }
+    /* Reduces table cell padding, observed in tighter table layout on tablets. */
+    th, td {
+        /* Smaller padding, observed in less space around table content on tablets. */
+        padding: 8px;
+        /* Smaller font, observed in smaller table text on tablets. */
+        font-size: 13px;
+    }
+    /* Smaller header font, observed in even smaller header text on tablets. */
+    th {
+        /* Reduced size, observed in compact table headers on tablets. */
+        font-size: 12px;
+    }
+    /* Smaller table font, observed in overall smaller table text on tablets. */
+    table {
+        /* Reduced size, observed in smaller table content on tablets. */
+        font-size: 13px;
+    }
+}
+
+/* Media query for phones: Further adjusts for screens up to 480px, observed in mobile-optimized layout on phones. */
+@media (max-width: 480px) {
+    /* Minimal body padding, observed in maximum content space utilization on phones. */
+    body {
+        /* Very small padding, observed in content almost edge-to-edge on phones. */
+        padding: 6px;
+        /* Small font size, observed in compact text on phone screens. */
+        font-size: 12px;
+    }
+    /* Minimal navigation gap, observed in tightly packed navigation on phones. */
+    .date-nav {
+        /* Tiny gap, observed in navigation elements almost touching on phones. */
+        gap: 3px;
+        /* No wrapping, observed in navigation staying horizontal on phones. */
+        flex-wrap: nowrap;
+    }
+    /* Tiny button sizes, observed in very small navigation buttons on phones. */
+    .date-nav button {
+        /* Minimal padding, observed in compact button sizes on phones. */
+        padding: 4px 6px;
+        /* Small font, observed in tiny button text on phones. */
+        font-size: 11px;
+        /* Minimum width, observed in buttons having a minimum clickable size on phones. */
+        min-width: 30px;
+        /* No shrinking, observed in buttons maintaining size on phones. */
+        flex-shrink: 0;
+    }
+    /* Small date display, observed in compact date text on phones. */
+    .date-display {
+        /* Small font, observed in reduced date display size on phones. */
+        font-size: 13px;
+        /* Narrow width, observed in slim date display on phones. */
+        min-width: 80px;
+        /* Allows shrinking, observed in date display compressing on phones. */
+        flex-shrink: 1;
+    }
+    /* Adjusts header paragraphs, observed in smaller header text on phones. */
+    .header p {
+        /* Medium font, observed in header text size on phones. */
+        font-size: 14px;
+        /* Small margins, observed in tight spacing around header text on phones. */
+        margin: 4px 0;
+    }
+    /* Minimal table padding, observed in very compact table cells on phones. */
+    th, td {
+        /* Tiny padding, observed in minimal space around table content on phones. */
+        padding: 6px;
+        /* Small font, observed in very small table text on phones. */
+        font-size: 11px;
+    }
+    /* Tiny header font, observed in minuscule header text on phones. */
+    th {
+        /* Very small size, observed in compact table headers on phones. */
+        font-size: 10px;
+    }
+    /* Small table font, observed in overall tiny table text on phones. */
+    table {
+        /* Small size, observed in small table content on phones. */
+        font-size: 11px;
+    }
+    /* Converts table to blocks, observed in table rows stacking vertically on phones. */
+    table, thead, tbody, th, td, tr {
+        /* Block display, observed in table elements becoming vertical blocks on phones. */
+        display: block;
+    }
+    /* Styles rows as cards, observed in table rows appearing as separate cards on phones. */
+    tr {
+        /* Bottom margin, observed as space between row cards on phones. */
+        margin-bottom: 12px;
+        /* Adds border, observed in outlines around each row card on phones. */
+        border: 1px solid #ddd;
+        /* Rounds corners, observed in rounded row card edges on phones. */
+        border-radius: 4px;
+        /* Hides overflow, observed in content staying within card boundaries on phones. */
+        /* overflow: hidden; */
+    }
+    /* Hides headers, observed in table headers disappearing, replaced by labels on phones. */
+    th {
+        /* Hidden display, observed in column headers not showing on phones. */
+        display: none;
+    }
+    /* Grid layout for cells, observed in cells arranged in label-data pairs on phones. */
+    td {
+        /* Grid display, observed in cells using grid layout for labels and data on phones. */
+        display: grid;
+        /* Two columns, observed in label column and data column layout on phones. */
+        grid-template-columns: 100px 1fr;
+        /* Top alignment, observed in content aligned to the top in cells on phones. */
+        align-items: start;
+        /* Padding, observed as space inside cells on phones. */
+        padding: 8px;
+        /* No border, observed in cells without borders on phones. */
+        border: none;
+        /* Bottom border, observed as separators between cells on phones. */
+        border-bottom: 1px solid #eee;
+    }
+    /* First cell spans full width, observed in game titles spanning the entire row width on phones. */
+    td:first-child {
+        /* Full span, observed in first cell taking full width for titles on phones. */
+        grid-column: 1 / -1;
+        /* Padding, observed as space around title cells on phones. */
+        padding: 8px;
+        /* Bottom border, observed as separator below titles on phones. */
+        border-bottom: 1px solid #ddd;
+    }
+    /* Adds labels via pseudo-element, observed in column labels appearing before data on phones. */
+    td:before {
+        /* Inserts label, observed in text labels like "Time:" appearing before data on phones. */
+        content: attr(data-label);
+        /* Bold weight, observed in label text being emphasized on phones. */
+        font-weight: 600;
+        /* Gray color, observed in label text color on phones. */
+        color: #666;
+        /* Small font, observed in label text size on phones. */
+        font-size: 11px;
+    }
+}
