@@ -110,6 +110,7 @@ class Stream():
         # via _gen_master_playlist()
         self._etag = ""
         self._master_playlist = None
+        self._variant_playlists = None
 
         # self._playlist_prefix = None
         # self._playback_session_id = None
@@ -354,6 +355,13 @@ class Stream():
             self._etag = ''
 
         self._master_playlist = rewrite_playlist_urls(res_text, full_url)
+        
+        variants = m3u8.loads(self._master_playlist).playlists
+        self._variant_playlists = sorted(
+            variants,
+            key=lambda v: v.stream_info.bandwidth or 0,
+            reverse=True
+        )
 
     async def _gen_media_playlist(self, base_url, playlist):
 

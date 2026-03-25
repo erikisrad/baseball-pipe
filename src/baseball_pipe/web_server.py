@@ -307,6 +307,7 @@ class WebServer:
         try:
             master_playlist_url = await self.streams[f"{gamePK}/{mediaId}"].get_master_playlist_url()
             assert "m3u8" in master_playlist_url
+            await self.streams[f"{gamePK}/{mediaId}"].get_master_playlist(base_url)
             error = None
         except Exception as err:
             error = err
@@ -314,15 +315,40 @@ class WebServer:
 
         if error:
             broadcast_html = f'<p><strong>Stream Error:</strong> {error}</p>'
-            download_link = ""
-            
-        elif selected_broadcast['type'] == "AM" or selected_broadcast['type'] == "FM":
-            broadcast_html = f'<audio src="{video_url}" controls autoplay></audio>'
-            download_link = f'<a href="{video_url}" download>download</a>'
-            
+            downloads = ""
+
         else:
-            broadcast_html = f'<video src="{video_url}" controls autoplay></video>'
-            download_link = f'<a href="{video_url}" download>download</a>'
+            if selected_broadcast['type'] == "AM" or selected_broadcast['type'] == "FM":
+                broadcast_html = f'<audio src="{video_url}" controls autoplay></audio>'
+            
+            else:
+                broadcast_html = f'<video src="{video_url}" controls autoplay></video>'
+
+            downloads = f'''<p><strong>Download Stream Playlists</strong></p>
+            <a href="{video_url}" download>Master Playlist</a>'''
+            
+            if self.streams[f"{gamePK}/{mediaId}"]._variant_playlists:
+
+                downloads += f'''
+            <p>Variants:</p>'''
+
+                for variant in self.streams[f"{gamePK}/{mediaId}"]._variant_playlists:
+                    xres, yres = variant.stream_info.resolution or ("?", "?")
+                    fps = variant.stream_info.frame_rate or "?"
+                    bps = variant.stream_info.bandwidth or 0
+
+                    mbps = bps / 1_000_000
+
+                    # Build padded fields INCLUDING commas
+                    col_res = f"{xres}x{yres},".ljust(20)
+                    col_fps = f"{fps} fps,".ljust(10)
+                    col_mbps = f"{mbps:.2f} Mbps".rjust(10)
+
+                    variant_url = urljoin(video_url, variant.uri)
+
+                    downloads += f'''\
+            <a href="{variant_url}" download>{col_res}{col_fps}{col_mbps}</a>
+            '''
 
         template = Template(html_file.read_text())
         html = template.substitute(p_date=u.pretty_print_date(date),
@@ -335,7 +361,7 @@ class WebServer:
                                    series_string=series_string,
                                    broadcast_name=selected_broadcast['name'],
                                    broadcast_html=broadcast_html,
-                                   download_link=download_link,
+                                   downloads=downloads,
                                    back_url=f"{base_url}{gamePK}"
                                    )
 
