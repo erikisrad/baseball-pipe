@@ -214,13 +214,13 @@ class WebServer:
     </head>
     <body>
         <p>{p_date}</p>
-        <br>
+        </br>
         <p>{an}{AT}{hn}</p>
         <p>{day_night}time at {venue}</p>
         <p>{series_description}{series_string}</p>
-        <br>
+        </br>
         <p>Broadcast via {selected_broadcast['name']}</p>
-        <br>
+        </br>
 """
         
         if not self.account:
@@ -250,11 +250,11 @@ class WebServer:
         else:
             html += f'''\
         <video src="{video_url}" width="400" controls autoplay></video>
-        <br><br>
+        </br></br>
         <a href="{video_url}" download>download</a>'''
 
         html += f"""
-        <br><br>
+        </br></br>
         <p><a href="{base_url}{gamePK}"><-- back</a></p>
     </body>
 </html>
@@ -324,15 +324,14 @@ class WebServer:
             else:
                 broadcast_html = f'<video src="{video_url}" controls autoplay></video>'
 
-            downloads = f'''<p><strong>Download Stream Playlists</strong></p>
-            <a href="{video_url}" download>Master Playlist</a>'''
+            downloads = f'''<div class="variant-columns">
+            <div class="vc">
+            <p class="dl">Ad-Free Playlists</p>
+            <a class="dl" href="{video_url}" download>Master Playlist</a>'''
             
-            if self.streams[f"{gamePK}/{mediaId}"]._variant_playlists:
+            if self.streams[f"{gamePK}/{mediaId}"].variant_playlists:
 
-                downloads += f'''
-            <p>Variants:</p>'''
-
-                for variant in self.streams[f"{gamePK}/{mediaId}"]._variant_playlists:
+                for variant in self.streams[f"{gamePK}/{mediaId}"].variant_playlists:
                     xres, yres = variant.stream_info.resolution or ("?", "?")
                     fps = variant.stream_info.frame_rate or "?"
                     bps = variant.stream_info.bandwidth or 0
@@ -340,15 +339,44 @@ class WebServer:
                     mbps = bps / 1_000_000
 
                     # Build padded fields INCLUDING commas
-                    col_res = f"{xres}x{yres},".ljust(20)
-                    col_fps = f"{fps} fps,".ljust(10)
-                    col_mbps = f"{mbps:.2f} Mbps".rjust(10)
+                    col_res = f"{xres}x{yres},".ljust(11)
+                    col_fps = f"{fps} fps,".ljust(11)
+                    col_mbps = f"{mbps:.2f} Mbps".ljust(9)
 
                     variant_url = urljoin(video_url, variant.uri)
 
-                    downloads += f'''\
-            <a href="{variant_url}" download>{col_res}{col_fps}{col_mbps}</a>
-            '''
+                    downloads += f'''
+            <a class="dl" href="{variant_url}" download>{col_res}{col_fps}{col_mbps}</a>'''
+                    
+                downloads += f'''
+                </div>'''   
+
+            downloads += f'''<div class="vc">
+            <p class="dl">Raw MLB.TV Playlists</p>
+            <a class="dl" href="{await self.streams[f"{gamePK}/{mediaId}"].get_master_playlist_url()}" download>Master Playlist</a>'''
+            
+            if self.streams[f"{gamePK}/{mediaId}"].mlbtv_variant_playlists:
+
+                for variant in self.streams[f"{gamePK}/{mediaId}"].mlbtv_variant_playlists:
+                    xres, yres = variant.stream_info.resolution or ("?", "?")
+                    fps = variant.stream_info.frame_rate or "?"
+                    bps = variant.stream_info.bandwidth or 0
+
+                    mbps = bps / 1_000_000
+
+                    # Build padded fields INCLUDING commas
+                    col_res = f"{xres}x{yres},".ljust(11)
+                    col_fps = f"{fps} fps,".ljust(11)
+                    col_mbps = f"{mbps:.2f} Mbps".ljust(9)
+
+                    variant_url = urljoin(self.streams[f"{gamePK}/{mediaId}"]._upstream_base_url, variant.uri)
+
+                    downloads += f'''
+            <a class="dl" href="{variant_url}" download>{col_res}{col_fps}{col_mbps}</a>'''
+                    
+                downloads += f'''
+                </div>
+                </div>''' 
 
         template = Template(html_file.read_text())
         html = template.substitute(p_date=u.pretty_print_date(date),
@@ -513,11 +541,11 @@ class WebServer:
     </head>
     <body>
         <p>{p_date}</p>
-        <br>
+        </br>
         <p>{away_name}{AT}{home_name}</p>
         <p>{day_night}time at {venue}</p>
         <p>{series_description}{series_string}</p>
-        <br>
+        </br>
 """
         
         if broadcasts:
@@ -562,7 +590,7 @@ class WebServer:
 
         html += f"""\
         </table>
-        <br>
+        </br>
         <p><a href="{base_url}{u.machine_print_date(date)}"><-- back</a></p>
     </body>
 </html>"""
@@ -769,7 +797,7 @@ class WebServer:
 
         html += f"""
     <p>{yesterday_btn}  {p_date}  {tomorrow_btn}</p>
-    <br>"""
+    </br>"""
 
         html += f"""
     <table>

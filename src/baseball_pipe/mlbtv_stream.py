@@ -110,7 +110,8 @@ class Stream():
         # via _gen_master_playlist()
         self._etag = ""
         self._master_playlist = None
-        self._variant_playlists = None
+        self.mlbtv_variant_playlists = None
+        self.variant_playlists = None
 
         # self._playlist_prefix = None
         # self._playback_session_id = None
@@ -313,6 +314,7 @@ class Stream():
             self._master_playlist_url = res_json["data"]["initPlaybackSession"]["playback"]["url"]
             self._upstream_base_url = self._master_playlist_url.rsplit('/', 1)[0] + '/'
 
+
     async def _gen_master_playlist(self, base_url):
 
         if not self._master_playlist_url:
@@ -355,9 +357,16 @@ class Stream():
             self._etag = ''
 
         self._master_playlist = rewrite_playlist_urls(res_text, full_url)
+
+        variants = m3u8.loads(res_text).playlists
+        self.mlbtv_variant_playlists = sorted(
+            variants,
+            key=lambda v: v.stream_info.bandwidth or 0,
+            reverse=True
+        )
         
         variants = m3u8.loads(self._master_playlist).playlists
-        self._variant_playlists = sorted(
+        self.variant_playlists = sorted(
             variants,
             key=lambda v: v.stream_info.bandwidth or 0,
             reverse=True

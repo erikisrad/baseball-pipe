@@ -125,6 +125,24 @@ audio {
     margin: 10px 0 20px 0;
 }
 
+.variant-columns {
+    display: flex;
+    gap: 40px;        /* space between columns */
+    margin-top: 10px;
+}
+
+.variant-columns .vc {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;         /* space between links */
+}
+
+.dl {
+    display: block;
+    font-family: monospace;   /* keeps your alignment */
+    white-space: pre;         /* preserves spacing */
+}
+
 
 /* Paragraph selector: Styles all p elements, observed in the spacing and line height of paragraph text throughout the webpage. */
 p {
