@@ -71,7 +71,20 @@ class WebServer:
                 return web.Response(text=css_content, content_type="text/css", headers=cors_headers())
             else:
                 return web.Response(status=404)
-        
+            
+        if rel_path.endswith(".js"):
+            js_path = os.path.join(SCRIPT_DIR, rel_path)
+            if os.path.exists(js_path):
+                with open(js_path, "r") as f:
+                    js_content = f.read()
+                return web.Response(
+                    text=js_content,
+                    content_type="application/javascript",
+                    headers=cors_headers()
+                )
+            else:
+                return web.Response(status=404)
+            
         # Check for gamePK/mediaId format (e.g., 777654/88c67daa-25e5-4737-9189-6e2295e12661)
         if '/' in rel_path:
             parts = rel_path.split('/')
@@ -90,9 +103,9 @@ class WebServer:
                     logger.info(f"serving media playlist {parts[2]} for gamePK {parts[0]} and mediaId {parts[1]}")
                     return await self.serve_media_playlist(base_url, parts[0], parts[1], parts[2])
 
-            elif len(parts) >= 3 and (".ts" in parts[-1] or ".aac" in parts[-1]):
+            elif len(parts) >= 3 and (".ts" in parts[-1] or ".aac" in parts[-1] or ".vtt" in parts[-1]):
                 suffix = '/'.join(parts[2:])
-                logger.info(f"serving .ts file {suffix} for gamePK {parts[0]} and mediaId {parts[1]}")
+                logger.info(f"serving .something file {suffix} for gamePK {parts[0]} and mediaId {parts[1]}")
                 return await self.serve_media_file(base_url, parts[0], parts[1], suffix)
 
         if rel_path and rel_path.isdigit() and len(rel_path) == 8:
@@ -322,7 +335,18 @@ class WebServer:
                 broadcast_html = f'<audio src="{video_url}" controls autoplay></audio>'
             
             else:
-                broadcast_html = f'<video src="{video_url}" controls autoplay></video>'
+                #broadcast_html = f'<video src="{video_url}" controls autoplay></video>'
+                broadcast_html = f'''<div id="video-container">
+            <video id="video" controls autoplay muted></video>
+            </div>
+
+
+            <script>
+            window.m3u8_url = "{video_url}";
+            </script>
+
+            <script src="/shaka_player.js"></script>
+            '''
 
             downloads = f'''<div class="variant-columns">
             <div class="vc">
