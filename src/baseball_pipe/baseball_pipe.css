@@ -18,14 +18,32 @@ body {
     background-color: #f9f9f9;
 }
 
-video {
+/* video {
     display: block;
     margin: 0 auto;
-    width: 100%;       /* Force it to fill the container width immediately */
+    width: 100%;       
     max-width: 900px;
-    aspect-ratio: 16 / 9; /* Reserves a 16:9 space even if the video is empty */
-    background-color: #000; /* Optional: adds a black box so it's not a white gap */
+    aspect-ratio: 16 / 9; 
+    background-color: #000; 
     height: auto;
+} */
+
+.video-js {
+    display: block;
+    margin: 0 auto;
+    width: 100% !important;   /* Force it to fill the container */
+    max-width: 900px;
+    aspect-ratio: 16 / 9;      /* Maintains the shape */
+    background-color: #000;
+    height: auto !important;   /* Let aspect-ratio handle the height */
+    border-radius: 4px;        /* Matches your table's aesthetic */
+    overflow: hidden;
+}
+
+/* Ensure the internal video element fills the new wrapper */
+.video-js video {
+    position: relative;
+    object-fit: contain;
 }
 
 audio {

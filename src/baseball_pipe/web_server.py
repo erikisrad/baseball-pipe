@@ -336,22 +336,20 @@ class WebServer:
             
             else:
                 #broadcast_html = f'<video src="{video_url}" controls autoplay></video>'
-                broadcast_html = f'''<div id="video-container">
-            <video id="video" controls autoplay muted></video>
-            </div>
+                broadcast_html = f'''<video id="hls-cast-player" class="video-js vjs-default-skin" controls preload="auto">
+                <source src="{video_url}" type="application/x-mpegURL" />
+            </video>
 
+            <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
+            <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
+            <script src="https://unpkg.com/@silvermine/videojs-chromecast@1.5.0/dist/silvermine-videojs-chromecast.min.js"></script>
 
-            <script>
-            window.m3u8_url = "{video_url}";
-            </script>
-
-            <script src="/shaka_player.js"></script>
-            '''
+            <script src="player.js"></script>'''
 
             downloads = f'''<div class="variant-columns">
-            <div class="vc">
-            <p class="dl">Ad-Free Playlists</p>
-            <a class="dl" href="{video_url}" download>Master Playlist</a>'''
+                <div class="vc">
+                    <p class="dl">Ad-Free Playlists</p>
+                    <a class="dl" href="{video_url}" download>Master Playlist</a>'''
             
             if self.streams[f"{gamePK}/{mediaId}"].variant_playlists:
 
