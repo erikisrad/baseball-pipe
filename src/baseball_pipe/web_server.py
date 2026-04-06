@@ -57,7 +57,19 @@ class WebServer:
         if request.path == "/favicon.ico":
             logger.info(f"favicon.ico requested, returning 404 to {request.host}")
             return web.Response(status=404)
+
+        if request.path == "/today":
+            logger.info(f"today requested, redirecting to current date for {request.host}")
+            return web.HTTPFound(location=f"/{u.machine_print_date(u.get_date())}")
         
+        if request.path == "/yesterday":
+            logger.info(f"yesterday requested, redirecting to yesterday's date for {request.host}")
+            return web.HTTPFound(location=f"/{u.machine_print_date(u.get_date(days_ago=1))}")
+        
+        if request.path == "/tomorrow":
+            logger.info(f"tomorrow requested, redirecting to tomorrow's date for {request.host}")
+            return web.HTTPFound(location=f"/{u.machine_print_date(u.get_date(days_ago=-1))}")
+
         scheme = request.scheme
         host = request.host
         base_url = f"{scheme}://{host}/"
@@ -336,15 +348,15 @@ class WebServer:
             
             else:
                 #broadcast_html = f'<video src="{video_url}" controls autoplay></video>'
-                broadcast_html = f'''<video id="hls-cast-player" class="video-js vjs-default-skin" controls preload="auto">
+                broadcast_html = f'''<video id="hls-cast-player" class="video-js vjs-default-skin vjs-big-play-centered" controls preload="auto">
                 <source src="{video_url}" type="application/x-mpegURL" />
             </video>
 
             <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
-            <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
+            <script src="https://vjs.zencdn.net/7.20.3/video.min.js"></script>
             <script src="https://unpkg.com/@silvermine/videojs-chromecast@1.5.0/dist/silvermine-videojs-chromecast.min.js"></script>
 
-            <script src="player.js"></script>'''
+            <script src="/player.js"></script>'''
 
             downloads = f'''<div class="variant-columns">
                 <div class="vc">
@@ -703,7 +715,7 @@ class WebServer:
                         <td data-label="Side">{short[broadcast.get('homeAway', 'N/A')]}</td>
                         <td data-label="State">{media_state_text}</td>
                         <td data-label="Language">{u.get_language(broadcast.get('language', 'N/A'))}</td>
-                        <td data-label="Availability">{broadcast['availability'].get('availabilityText', 'N/A')}</td>
+                        <td data-label="Availability">{broadcast.get('availability', {}).get('availabilityText', 'N/A')}</td>
                     </tr>""" 
         broadcast_html += '''
                 </tbody>
