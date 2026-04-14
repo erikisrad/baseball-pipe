@@ -10,6 +10,11 @@ document.addEventListener('DOMContentLoaded', function() {
    var options = {
       fluid: true,
       responsive: true,
+      liveui: true,
+      liveTracker: {
+        trackingThreshold: 5, // Seconds to play before showing rewind UI
+        liveTolerance: 5      // Seconds from the edge to consider "live"
+      },
       // Use standard techOrder; the plugin handles the 'casting' tech internally
       techOrder: [ 'html5' ], 
       plugins: {

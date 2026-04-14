@@ -34,6 +34,9 @@ def rewrite_playlist_urls(playlist_content, full_url):
         elif "#EXT-OATCLS-SCTE35:" in line:
             logger.debug("skipping splice")
 
+        elif "#EXT-X-PLAYLIST-TYPE:EVENT" in line:
+            logger.debug("skipping playlist type event")
+
         elif "#EXT-X-CUE-OUT-CONT:" in line:
             try:
                 m = re.search(r"ElapsedTime=([0-9]*\.?[0-9]+)", line)

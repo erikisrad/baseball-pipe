@@ -1,9 +1,11 @@
 import base64
 import hashlib
 import baseball_pipe.utilities as u
+import baseball_pipe.secret as s
 from baseball_pipe.mlbtv_token import Token
 import aiohttp
 import logging
+
 
 logger = logging.getLogger(__name__)
 
@@ -13,11 +15,11 @@ CLIENT_ID = "0oap7wa857jcvPlZ5355"
 class Account():
 
     def __init__(self,
-                 username:str="erik.rad@gmail.com",
-                 password:str="As6?T.j$Lp3Ezz2"):
+                 u:str=s.u,
+                 p:str=s.p):
         
-        self.username = username
-        self.password = password
+        self.u = u
+        self.p = p
         self.session = None
 
         self.reset()
@@ -145,7 +147,7 @@ class Account():
 
         IDENTITY_URL = "https://ids.mlb.com/idp/idx/identify"
 
-        payload = '{"identifier":"%s","stateHandle":"%s"}' % (self.username, self._introspect_state_handle)
+        payload = '{"identifier":"%s","stateHandle":"%s"}' % (self.u, self._introspect_state_handle)
 
         headers = {
             "Accept": "application/json; okta-version=1.0.0",
@@ -230,7 +232,7 @@ class Account():
 
         ANSWER_URL = "https://ids.mlb.com/idp/idx/challenge/answer"
 
-        payload = '{"credentials":{"passcode":"%s"},"stateHandle":"%s"}' % (self.password, self._challenge_state_handle)
+        payload = '{"credentials":{"passcode":"%s"},"stateHandle":"%s"}' % (self.p, self._challenge_state_handle)
 
         headers = {
                 "Accept": "application/json; okta-version=1.0.0",

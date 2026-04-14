@@ -319,6 +319,7 @@ class WebServer:
         day_night = game['dayNight'].capitalize()
 
         video_url = f"{base_url}{gamePK}/{mediaId}/master.m3u8"
+        #video_url = "https://dai.google.com/linear/hls/pa/event/k-VHR5unRdusBDqoXAuB0Q/stream/756c3f5a-16bd-4acf-ba61-a5f598871fd2:TUL/master.m3u8" # debug
 
         if not self.account:
             self.account = baseball_pipe.mlbtv_account.Account()
