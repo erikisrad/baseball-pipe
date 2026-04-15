@@ -1,10 +1,10 @@
 import base64
 import hashlib
 import baseball_pipe.utilities as u
-import baseball_pipe.secret as s
 from baseball_pipe.mlbtv_token import Token
 import aiohttp
 import logging
+import os
 
 
 logger = logging.getLogger(__name__)
@@ -15,8 +15,8 @@ CLIENT_ID = "0oap7wa857jcvPlZ5355"
 class Account():
 
     def __init__(self,
-                 u:str=s.u,
-                 p:str=s.p):
+                 u:str=os.environ["u"],
+                 p:str=os.environ["p"]):
         
         self.u = u
         self.p = p
