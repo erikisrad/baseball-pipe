@@ -1,4 +1,0 @@
-aiohttp
-m3u8
-pytz
-requests
