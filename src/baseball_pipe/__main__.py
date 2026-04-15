@@ -4,9 +4,14 @@ import os, sys, logging
 APP = "baseball_pipe"
 
 # CONFIGURE LOGGING
-appdata_local = os.getenv("LOCALAPPDATA")
-log_file_path = os.path.join(appdata_local, APP, f"{APP}.log")
-os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
+#appdata_local = os.getenv("LOCALAPPDATA")
+#log_file_path = os.path.join(appdata_local, APP, f"{APP}.log")
+
+log_dir = os.path.join(os.getcwd(), "logs")
+os.makedirs(log_dir, exist_ok=True)
+log_file_path = os.path.join(log_dir, f"{APP}.log")
+
+#os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
 
 stdout_handler = logging.StreamHandler(sys.stdout)
 stdout_handler.setLevel(logging.INFO)
