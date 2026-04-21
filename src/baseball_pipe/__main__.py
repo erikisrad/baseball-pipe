@@ -7,7 +7,8 @@ APP = "baseball_pipe"
 #appdata_local = os.getenv("LOCALAPPDATA")
 #log_file_path = os.path.join(appdata_local, APP, f"{APP}.log")
 
-log_dir = os.path.join(os.getcwd(), "logs")
+src_dir = os.path.dirname(os.getcwd())
+log_dir = os.path.join(src_dir, "logs")
 os.makedirs(log_dir, exist_ok=True)
 log_file_path = os.path.join(log_dir, f"{APP}.log")
 
