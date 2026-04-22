@@ -91,12 +91,13 @@ def rewrite_playlist_urls(playlist_content, full_url):
 
 class Stream():
 
-    def __init__(self, token: Token, game_pk: str, media_id: str):
+    def __init__(self, token:Token, game_pk:str, media_id:str, session:aiohttp.ClientSession, proxy:str):
         self.token = token
         self.game_pk = game_pk
         self.media_id = media_id
         self.url = "https://www.mlb.com/tv/g%s/v%s" % (self.game_pk, self.media_id)
-        self.session = None
+        self.session = session
+        self.proxy = proxy
 
         self.reset()
 
@@ -123,41 +124,21 @@ class Stream():
         # self._commercial_breaks = None
 
     async def get_master_playlist(self, base_url):
-        self.session = aiohttp.ClientSession()
-        try:
-            await self._gen_master_playlist(base_url)
-        finally:
-            await self.session.close()
+        await self._gen_master_playlist(base_url)
         return self._master_playlist
     
     async def get_master_playlist_url(self):
-        self.session = aiohttp.ClientSession()
-        try:
-            await self._gen_master_playlist_url()
-        finally:
-            await self.session.close()
+        await self._gen_master_playlist_url()
         return self._master_playlist_url
     
     async def get_media_playlist(self, base_url, playlist):
-        self.session = aiohttp.ClientSession()
-        try:
-            return await self._gen_media_playlist(base_url, playlist)
-        finally:
-            await self.session.close()
+        return await self._gen_media_playlist(base_url, playlist)
 
     async def get_media_file(self, base_url, suffix):
-        self.session = aiohttp.ClientSession()
-        try:
-            return await self._gen_media_file(base_url, suffix)
-        finally:
-            await self.session.close()
+        return await self._gen_media_file(base_url, suffix)
 
     async def get_key_file(self, base_url, suffix):
-        self.session = aiohttp.ClientSession()
-        try:
-            return await self._gen_key_file(base_url, suffix)
-        finally:
-            await self.session.close()
+        return await self._gen_key_file(base_url, suffix)
 
     async def _gen_session(self):
 
@@ -215,7 +196,7 @@ class Stream():
         }
 
         logger.info(f"sending request to {GRAPHQL_URL}")
-        async with self.session.post(GRAPHQL_URL, headers=headers, json=payload, ssl=False) as res:
+        async with self.session.post(GRAPHQL_URL, headers=headers, json=payload, proxy=self.proxy, ssl=False) as res:
             logger.info("awaiting response...")
             if res.status != 200:
                 raise Exception(f"Failed to gen session: {res.status} {res.reason}")
@@ -303,7 +284,7 @@ class Stream():
         }
 
         logger.info(f"sending request to {GRAPHQL_URL}")
-        async with self.session.post(GRAPHQL_URL, headers=headers, json=payload, ssl=False) as res:
+        async with self.session.post(GRAPHQL_URL, headers=headers, json=payload, proxy=self.proxy, ssl=False) as res:
             logger.info("awaiting response...")
             if res.status != 200:
                 raise Exception(f"Failed to gen master playlist url: {res.status} {res.reason}")
@@ -347,7 +328,7 @@ class Stream():
         }
 
         logger.info(f"sending request to {self._master_playlist_url}")
-        async with self.session.get(self._master_playlist_url, headers=headers, ssl=False) as res:
+        async with self.session.get(self._master_playlist_url, headers=headers, proxy=self.proxy, ssl=False) as res:
             logger.info("awaiting response...")
             if res.status != 200:
                 raise Exception(f"Failed to gen master playlist: {res.status} {res.reason}")
@@ -402,7 +383,7 @@ class Stream():
         }
 
         logger.info(f"sending request to {target}")
-        async with self.session.get(target, headers=headers, ssl=False) as res:
+        async with self.session.get(target, headers=headers, proxy=self.proxy, ssl=False) as res:
             logger.info("awaiting response...")
             if res.status != 200:
                 raise Exception(f"Failed to gen {playlist} playlist: {res.status} {res.reason}")
@@ -445,7 +426,7 @@ class Stream():
         }
 
         logger.info(f"sending request to {target}")
-        async with self.session.get(target, headers=headers, ssl=False) as res:
+        async with self.session.get(target, headers=headers, proxy=self.proxy, ssl=False) as res:
             logger.info("awaiting response...")
             if res.status != 200:
                 raise Exception(f"Failed to gen {target} file: {res.status} {res.reason}")
@@ -488,7 +469,7 @@ class Stream():
         }
 
         logger.info(f"sending request to {target}")
-        async with self.session.get(target, headers=headers, ssl=False) as res:
+        async with self.session.get(target, headers=headers, proxy=self.proxy, ssl=False) as res:
             logger.info("awaiting response...")
             if res.status not in [200, 206]:
                 raise Exception(f"Failed to gen {target} file: {res.status} {res.reason}")

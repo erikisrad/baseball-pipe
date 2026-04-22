@@ -15,12 +15,15 @@ CLIENT_ID = "0oap7wa857jcvPlZ5355"
 class Account():
 
     def __init__(self,
+                 session:aiohttp.ClientSession,
+                 proxy:str,
                  u:str=os.environ["u"],
                  p:str=os.environ["p"]):
         
         self.u = u
         self.p = p
-        self.session = None
+        self.session = session
+        self.proxy = proxy
 
         self.reset()
 
@@ -39,12 +42,8 @@ class Account():
 
     async def get_token(self) -> Token:
         if not self._token or self._token.is_expired():
-            self.session = aiohttp.ClientSession()
-            try:
-                self.reset()
-                await self._gen_token()
-            finally:
-                await self.session.close()
+            self.reset()
+            await self._gen_token()
         return self._token
 
     async def _post_interact(self):
@@ -93,7 +92,7 @@ class Account():
         }
 
         logger.info(f"sending request to {interact_url}")
-        async with self.session.post(interact_url, headers=headers, data=payload, ssl=False) as res:
+        async with self.session.post(interact_url, headers=headers, data=payload, proxy=self.proxy, ssl=False) as res:
             logger.info("awaiting response...")
             if res.status != 200:
                 raise Exception(f"Failed to post interact: {res.status} {res.reason}")
@@ -130,7 +129,7 @@ class Account():
         }
 
         logger.info(f"sending request to {INTROSPECT_URL}")
-        async with self.session.post(INTROSPECT_URL, headers=headers, data=payload, ssl=False) as res:
+        async with self.session.post(INTROSPECT_URL, headers=headers, data=payload, proxy=self.proxy, ssl=False) as res:
             logger.info("awaiting response...")
             if res.status != 200:
                 raise Exception(f"Failed to post introspect: {res.status} {res.reason}")
@@ -167,7 +166,7 @@ class Account():
         }
 
         logger.info(f"sending request to {IDENTITY_URL}")
-        async with self.session.post(IDENTITY_URL, headers=headers, data=payload, ssl=False) as res:
+        async with self.session.post(IDENTITY_URL, headers=headers, data=payload, proxy=self.proxy, ssl=False) as res:
             logger.info("awaiting response...")
             if res.status != 200:
                 raise Exception(f"Failed to post identity: {res.status} {res.reason}")
@@ -216,7 +215,7 @@ class Account():
         }
 
         logger.info(f"sending request to {CHALLENGE_URL}")
-        async with self.session.post(CHALLENGE_URL, headers=headers, data=payload, ssl=False) as res:
+        async with self.session.post(CHALLENGE_URL, headers=headers, data=payload, proxy=self.proxy, ssl=False) as res:
             logger.info("awaiting response...")
             if res.status != 200:
                 raise Exception(f"Failed to post challenge: {res.status} {res.reason}")
@@ -252,7 +251,7 @@ class Account():
         }
 
         logger.info(f"sending request to {ANSWER_URL}")
-        async with self.session.post(ANSWER_URL, headers=headers, data=payload, ssl=False) as res:
+        async with self.session.post(ANSWER_URL, headers=headers, data=payload, proxy=self.proxy, ssl=False) as res:
             logger.info("awaiting response...")
             if res.status != 200:
                 raise Exception(f"Failed to post answer: {res.status} {res.reason}")
@@ -307,7 +306,7 @@ class Account():
         }
 
         logger.info(f"sending request to {TOKEN_URL}")
-        async with self.session.post(TOKEN_URL, headers=headers, data=payload, ssl=False) as res:
+        async with self.session.post(TOKEN_URL, headers=headers, data=payload, proxy=self.proxy, ssl=False) as res:
             logger.info("awaiting response...")
             if res.status != 200:
                 raise Exception(f"Failed to gen token: {res.status} {res.reason}")

@@ -4,6 +4,9 @@ from string import Template
 from pathlib import Path
 from urllib.parse import urljoin
 import logging as logger
+
+import aiohttp
+from flask import app
 import baseball_pipe.mlb_stats
 import baseball_pipe.utilities as u
 import baseball_pipe.mlbtv_account
@@ -25,7 +28,11 @@ def cors_headers(content_type=None):
         return headers
 
 class WebServer:
-    def __init__(self, host="127.0.0.1", port=8080):
+    def __init__(self, host="127.0.0.1", port=80,
+                 proxy_username:str=os.environ["proxu"],
+                 proxy_password:str=os.environ["proxp"],
+                 proxy_host:str=os.environ["proxhost"],
+                 proxy_port:str=os.environ["proxport"]):
 
         self.host = host
         self.port = port
@@ -34,12 +41,23 @@ class WebServer:
         self.account = None
         self.token = None
         self.streams = {}
+        self.proxy_url = f"http://{proxy_username}:{proxy_password}@{proxy_host}:{proxy_port}"
+        self.master_session = None
+
+    async def on_startup(self, app):
+        self.master_session = aiohttp.ClientSession()
+
+    async def on_cleanup(self, app):
+        if self.master_session:
+            await self.master_session.close()
 
     def start(self):
 
         #self.app.router.add_get("/proxy/{gamePK}/{mediaId}/{url:.*}", self.proxy_request)
         #self.app.router.add_get("/{gamePK}/{mediaId}/master.m3u8", self.serve_master_playlist)
         self.app.router.add_get("/{arg:.*}", self.decide_serve)
+        self.app.on_startup.append(self.on_startup)
+        self.app.on_cleanup.append(self.on_cleanup)
 
         logger.info(f"Starting web server at http://{self.host}:{self.port}")
         web.run_app(self.app, host=self.host, port=self.port)
@@ -141,13 +159,13 @@ class WebServer:
         logger.info(f"processing master playlist for gamePK {gamePK}, mediaId: {mediaId}")
 
         if not self.account:
-            self.account = baseball_pipe.mlbtv_account.Account()
+            self.account = baseball_pipe.mlbtv_account.Account(self.master_session, self.proxy_url)
 
         if not self.token:
             self.token = await self.account.get_token()
         
         if f"{gamePK}/{mediaId}" not in self.streams:
-            self.streams[f"{gamePK}/{mediaId}"] = baseball_pipe.mlbtv_stream.Stream(self.token, gamePK, mediaId)
+            self.streams[f"{gamePK}/{mediaId}"] = baseball_pipe.mlbtv_stream.Stream(self.token, gamePK, mediaId, self.master_session, self.proxy_url)
 
         #stream = baseball_pipe.mlbtv_stream.Stream(self.token, gamePK, mediaId)
         playlist = await self.streams[f"{gamePK}/{mediaId}"].get_master_playlist(base_url)
@@ -249,13 +267,13 @@ class WebServer:
 """
         
         if not self.account:
-            self.account = baseball_pipe.mlbtv_account.Account()
+            self.account = baseball_pipe.mlbtv_account.Account(self.master_session, self.proxy_url)
 
         if not self.token:
             self.token = await self.account.get_token()
         
         if f"{gamePK}/{mediaId}" not in self.streams:
-            self.streams[f"{gamePK}/{mediaId}"] = baseball_pipe.mlbtv_stream.Stream(self.token, gamePK, mediaId)
+            self.streams[f"{gamePK}/{mediaId}"] = baseball_pipe.mlbtv_stream.Stream(self.token, gamePK, mediaId, self.master_session, self.proxy_url)
 
         try:
             master_playlist_url = await self.streams[f"{gamePK}/{mediaId}"].get_master_playlist_url()
@@ -322,13 +340,13 @@ class WebServer:
         #video_url = "https://dai.google.com/linear/hls/pa/event/k-VHR5unRdusBDqoXAuB0Q/stream/756c3f5a-16bd-4acf-ba61-a5f598871fd2:TUL/master.m3u8" # debug
 
         if not self.account:
-            self.account = baseball_pipe.mlbtv_account.Account()
+            self.account = baseball_pipe.mlbtv_account.Account(self.master_session, self.proxy_url)
 
         if not self.token:
             self.token = await self.account.get_token()
         
         if f"{gamePK}/{mediaId}" not in self.streams:
-            self.streams[f"{gamePK}/{mediaId}"] = baseball_pipe.mlbtv_stream.Stream(self.token, gamePK, mediaId)
+            self.streams[f"{gamePK}/{mediaId}"] = baseball_pipe.mlbtv_stream.Stream(self.token, gamePK, mediaId, self.master_session, self.proxy_url)
 
         try:
             master_playlist_url = await self.streams[f"{gamePK}/{mediaId}"].get_master_playlist_url()
@@ -437,13 +455,13 @@ class WebServer:
         logger.info(f"processing {playlist} playlist for gamePK {gamePK}, mediaId: {mediaId}")
 
         if not self.account:
-            self.account = baseball_pipe.mlbtv_account.Account()
+            self.account = baseball_pipe.mlbtv_account.Account(self.master_session, self.proxy_url)
 
         if not self.token:
             self.token = await self.account.get_token()
         
         if f"{gamePK}/{mediaId}" not in self.streams:
-            self.streams[f"{gamePK}/{mediaId}"] = baseball_pipe.mlbtv_stream.Stream(self.token, gamePK, mediaId)
+            self.streams[f"{gamePK}/{mediaId}"] = baseball_pipe.mlbtv_stream.Stream(self.token, gamePK, mediaId, self.master_session, self.proxy_url)
 
         #stream = baseball_pipe.mlbtv_stream.Stream(self.token, gamePK, mediaId)
         playlist = await self.streams[f"{gamePK}/{mediaId}"].get_media_playlist(base_url, playlist)
@@ -461,13 +479,13 @@ class WebServer:
         logger.info(f"processing {suffix} file for gamePK {gamePK}, mediaId: {mediaId}")
 
         if not self.account:
-            self.account = baseball_pipe.mlbtv_account.Account()
+            self.account = baseball_pipe.mlbtv_account.Account(self.master_session, self.proxy_url)
 
         if not self.token:
             self.token = await self.account.get_token()
         
         if f"{gamePK}/{mediaId}" not in self.streams:
-            self.streams[f"{gamePK}/{mediaId}"] = baseball_pipe.mlbtv_stream.Stream(self.token, gamePK, mediaId)
+            self.streams[f"{gamePK}/{mediaId}"] = baseball_pipe.mlbtv_stream.Stream(self.token, gamePK, mediaId, self.master_session, self.proxy_url)
 
         #stream = baseball_pipe.mlbtv_stream.Stream(self.token, gamePK, mediaId)
         file = await self.streams[f"{gamePK}/{mediaId}"].get_media_file(base_url, suffix)
@@ -487,13 +505,13 @@ class WebServer:
         logger.info(f"processing {suffix} key for gamePK {gamePK}, mediaId: {mediaId}")
 
         if not self.account:
-            self.account = baseball_pipe.mlbtv_account.Account()
+            self.account = baseball_pipe.mlbtv_account.Account(self.master_session, self.proxy_url)
 
         if not self.token:
             self.token = await self.account.get_token()
         
         if f"{gamePK}/{mediaId}" not in self.streams:
-            self.streams[f"{gamePK}/{mediaId}"] = baseball_pipe.mlbtv_stream.Stream(self.token, gamePK, mediaId)
+            self.streams[f"{gamePK}/{mediaId}"] = baseball_pipe.mlbtv_stream.Stream(self.token, gamePK, mediaId, self.master_session, self.proxy_url)
 
         #stream = baseball_pipe.mlbtv_stream.Stream(self.token, gamePK, mediaId)
         file = await self.streams[f"{gamePK}/{mediaId}"].get_key_file(base_url, suffix)
