@@ -6,7 +6,6 @@ from urllib.parse import urljoin
 import logging as logger
 
 import aiohttp
-from flask import app
 import baseball_pipe.mlb_stats
 import baseball_pipe.utilities as u
 import baseball_pipe.mlbtv_account
@@ -28,7 +27,7 @@ def cors_headers(content_type=None):
         return headers
 
 class WebServer:
-    def __init__(self, host="127.0.0.1", port=80,
+    def __init__(self, host="127.0.0.1", port=8080,
                  proxy_username:str=os.environ["proxu"],
                  proxy_password:str=os.environ["proxp"],
                  proxy_host:str=os.environ["proxhost"],
