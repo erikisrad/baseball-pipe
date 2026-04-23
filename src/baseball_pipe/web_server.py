@@ -2,7 +2,7 @@ import os
 import socket
 import time
 from aiohttp import web
-from curl_cffi import requests
+import curl_cffi
 from string import Template
 from pathlib import Path
 from urllib.parse import urljoin
@@ -57,7 +57,7 @@ class WebServer:
         # )
 
         self.master_session = aiohttp.ClientSession()
-        self.chrome120_session = requests.Session(impersonate="chrome120")
+        self.chrome120_session = curl_cffi.Session(impersonate="chrome120")
 
     async def on_cleanup(self, app):
         if self.master_session:
