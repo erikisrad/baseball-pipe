@@ -1,4 +1,5 @@
 import os
+import socket
 from aiohttp import web
 from string import Template
 from pathlib import Path
@@ -44,7 +45,14 @@ class WebServer:
         self.master_session = None
 
     async def on_startup(self, app):
-        self.master_session = aiohttp.ClientSession()
+        self.master_session = aiohttp.ClientSession(
+            cookie_jar=aiohttp.CookieJar(unsafe=True),
+            connector=aiohttp.TCPConnector(
+                family=socket.AF_INET,   # force IPv4 (Bright Data + Okta friendly)
+                ssl=False                # matches your requests
+            )
+        )
+    
 
     async def on_cleanup(self, app):
         if self.master_session:
