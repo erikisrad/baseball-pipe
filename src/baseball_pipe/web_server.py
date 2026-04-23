@@ -1,6 +1,8 @@
 import os
 import socket
+import time
 from aiohttp import web
+from curl_cffi import requests
 from string import Template
 from pathlib import Path
 from urllib.parse import urljoin
@@ -43,16 +45,19 @@ class WebServer:
         self.streams = {}
         self.proxy_url = f"http://{proxy_username}:{proxy_password}@{proxy_host}:{proxy_port}"
         self.master_session = None
+        self.chrome120_session = None
 
     async def on_startup(self, app):
-        self.master_session = aiohttp.ClientSession(
-            cookie_jar=aiohttp.CookieJar(unsafe=True),
-            connector=aiohttp.TCPConnector(
-                family=socket.AF_INET,   # force IPv4 (Bright Data + Okta friendly)
-                ssl=False                # matches your requests
-            )
-        )
-    
+        # self.master_session = aiohttp.ClientSession(
+        #     cookie_jar=aiohttp.CookieJar(unsafe=True),
+        #     connector=aiohttp.TCPConnector(
+        #         family=socket.AF_INET,   # force IPv4 (Bright Data + Okta friendly)
+        #         ssl=False                # matches your requests
+        #     )
+        # )
+
+        self.master_session = aiohttp.ClientSession()
+        self.chrome120_session = requests.Session(impersonate="chrome120")
 
     async def on_cleanup(self, app):
         if self.master_session:
@@ -166,7 +171,7 @@ class WebServer:
         logger.info(f"processing master playlist for gamePK {gamePK}, mediaId: {mediaId}")
 
         if not self.account:
-            self.account = baseball_pipe.mlbtv_account.Account(self.master_session, self.proxy_url)
+            self.account = baseball_pipe.mlbtv_account.Account(self.chrome120_session, self.proxy_url)
 
         if not self.token:
             self.token = await self.account.get_token()
@@ -274,7 +279,7 @@ class WebServer:
 """
         
         if not self.account:
-            self.account = baseball_pipe.mlbtv_account.Account(self.master_session, self.proxy_url)
+            self.account = baseball_pipe.mlbtv_account.Account(self.chrome120_session, self.proxy_url)
 
         if not self.token:
             self.token = await self.account.get_token()
@@ -347,7 +352,7 @@ class WebServer:
         #video_url = "https://dai.google.com/linear/hls/pa/event/k-VHR5unRdusBDqoXAuB0Q/stream/756c3f5a-16bd-4acf-ba61-a5f598871fd2:TUL/master.m3u8" # debug
 
         if not self.account:
-            self.account = baseball_pipe.mlbtv_account.Account(self.master_session, self.proxy_url)
+            self.account = baseball_pipe.mlbtv_account.Account(self.chrome120_session, self.proxy_url)
 
         if not self.token:
             self.token = await self.account.get_token()
@@ -462,7 +467,7 @@ class WebServer:
         logger.info(f"processing {playlist} playlist for gamePK {gamePK}, mediaId: {mediaId}")
 
         if not self.account:
-            self.account = baseball_pipe.mlbtv_account.Account(self.master_session, self.proxy_url)
+            self.account = baseball_pipe.mlbtv_account.Account(self.chrome120_session, self.proxy_url)
 
         if not self.token:
             self.token = await self.account.get_token()
@@ -486,7 +491,7 @@ class WebServer:
         logger.info(f"processing {suffix} file for gamePK {gamePK}, mediaId: {mediaId}")
 
         if not self.account:
-            self.account = baseball_pipe.mlbtv_account.Account(self.master_session, self.proxy_url)
+            self.account = baseball_pipe.mlbtv_account.Account(self.chrome120_session, self.proxy_url)
 
         if not self.token:
             self.token = await self.account.get_token()
@@ -512,7 +517,7 @@ class WebServer:
         logger.info(f"processing {suffix} key for gamePK {gamePK}, mediaId: {mediaId}")
 
         if not self.account:
-            self.account = baseball_pipe.mlbtv_account.Account(self.master_session, self.proxy_url)
+            self.account = baseball_pipe.mlbtv_account.Account(self.chrome120_session, self.proxy_url)
 
         if not self.token:
             self.token = await self.account.get_token()

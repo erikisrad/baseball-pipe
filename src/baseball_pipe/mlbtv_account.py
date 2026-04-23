@@ -1,21 +1,24 @@
+import asyncio
 import base64
 import hashlib
+
+import curl_cffi
 import baseball_pipe.utilities as u
 from baseball_pipe.mlbtv_token import Token
 import aiohttp
+from curl_cffi import requests
 import logging
 import os
 
 
 logger = logging.getLogger(__name__)
 
-
 CLIENT_ID = "0oap7wa857jcvPlZ5355"
 
 class Account():
 
     def __init__(self,
-                 session:aiohttp.ClientSession,
+                 session:curl_cffi.requests.Session,
                  proxy:str,
                  u:str=os.environ["u"],
                  p:str=os.environ["p"]):
@@ -39,6 +42,9 @@ class Account():
         self._answer_state_handle =  None
         self._interaction_code = None
         self._token = None
+
+    async def curl_post_async(self, url, **kwargs):
+        return await asyncio.to_thread(lambda: self.session.post(url, **kwargs))
 
     async def get_token(self) -> Token:
         if not self._token or self._token.is_expired():
@@ -92,12 +98,11 @@ class Account():
         }
 
         logger.info(f"sending request to {interact_url}")
-        async with self.session.post(interact_url, headers=headers, data=payload, proxy=self.proxy, ssl=False) as res:
-            logger.info("awaiting response...")
-            if res.status != 200:
-                raise Exception(f"Failed to post interact: {res.status} {res.reason}")
-            res_json = await res.json()
-            logger.info(f"response received, status {res.status}")
+        res = await self.curl_post_async(interact_url, headers=headers, data=payload, proxy=self.proxy)
+        if res.status_code != 200:
+            raise Exception(f"Failed to post interact: {res.status_code} {res.reason}")
+        res_json = res.json()
+        logger.info(f"response received, status {res.status_code}")
 
         self._interaction_handle = res_json["interaction_handle"]
         logger.info(f"obtained interaction_handle: {self._interaction_handle[0:3]}...{self._interaction_handle[-3:]}")
@@ -129,12 +134,11 @@ class Account():
         }
 
         logger.info(f"sending request to {INTROSPECT_URL}")
-        async with self.session.post(INTROSPECT_URL, headers=headers, data=payload, proxy=self.proxy, ssl=False) as res:
-            logger.info("awaiting response...")
-            if res.status != 200:
-                raise Exception(f"Failed to post introspect: {res.status} {res.reason}")
-            res_json = await res.json()
-            logger.info(f"response received, status {res.status}")
+        res = await self.curl_post_async(INTROSPECT_URL, headers=headers, data=payload, proxy=self.proxy)
+        if res.status_code != 200:
+            raise Exception(f"Failed to post introspect: {res.status_code} {res.reason}")
+        res_json = res.json()
+        logger.info(f"response received, status {res.status_code}")
 
         self._introspect_state_handle =  res_json["stateHandle"]
         logger.info(f"obtained introspect stateHandle: {self._introspect_state_handle[0:3]}...{self._introspect_state_handle[-3:]}")
@@ -166,12 +170,11 @@ class Account():
         }
 
         logger.info(f"sending request to {IDENTITY_URL}")
-        async with self.session.post(IDENTITY_URL, headers=headers, data=payload, proxy=self.proxy, ssl=False) as res:
-            logger.info("awaiting response...")
-            if res.status != 200:
-                raise Exception(f"Failed to post identity: {res.status} {res.reason}")
-            res_json = await res.json()
-            logger.info(f"response received, status {res.status}")
+        res = await self.curl_post_async(IDENTITY_URL, headers=headers, data=payload, proxy=self.proxy)
+        if res.status_code != 200:
+            raise Exception(f"Failed to post identity: {res.status_code} {res.reason}")
+        res_json = res.json()
+        logger.info(f"response received, status {res.status_code}")
 
         self._identity_state_handle = res_json["stateHandle"]
         authenticators = res_json["authenticators"]["value"]
@@ -215,12 +218,11 @@ class Account():
         }
 
         logger.info(f"sending request to {CHALLENGE_URL}")
-        async with self.session.post(CHALLENGE_URL, headers=headers, data=payload, proxy=self.proxy, ssl=False) as res:
-            logger.info("awaiting response...")
-            if res.status != 200:
-                raise Exception(f"Failed to post challenge: {res.status} {res.reason}")
-            res_json = await res.json()
-            logger.info(f"response received, status {res.status}")
+        res = await self.curl_post_async(CHALLENGE_URL, headers=headers, data=payload, proxy=self.proxy)
+        if res.status_code != 200:
+            raise Exception(f"Failed to post challenge: {res.status_code} {res.reason}")
+        res_json = res.json()
+        logger.info(f"response received, status {res.status_code}")
 
         self._challenge_state_handle =  res_json["stateHandle"]
 
@@ -251,12 +253,11 @@ class Account():
         }
 
         logger.info(f"sending request to {ANSWER_URL}")
-        async with self.session.post(ANSWER_URL, headers=headers, data=payload, proxy=self.proxy, ssl=False) as res:
-            logger.info("awaiting response...")
-            if res.status != 200:
-                raise Exception(f"Failed to post answer: {res.status} {res.reason}")
-            res_json = await res.json()
-            logger.info(f"response received, status {res.status}")
+        res = await self.curl_post_async(ANSWER_URL, headers=headers, data=payload, proxy=self.proxy)
+        if res.status_code != 200:
+            raise Exception(f"Failed to post answer: {res.status_code} {res.reason}")
+        res_json = res.json()
+        logger.info(f"response received, status {res.status_code}")
 
         self._answer_state_handle =  res_json["stateHandle"]
         success_with_interaction_code = res_json["successWithInteractionCode"]["value"]
@@ -306,11 +307,10 @@ class Account():
         }
 
         logger.info(f"sending request to {TOKEN_URL}")
-        async with self.session.post(TOKEN_URL, headers=headers, data=payload, proxy=self.proxy, ssl=False) as res:
-            logger.info("awaiting response...")
-            if res.status != 200:
-                raise Exception(f"Failed to gen token: {res.status} {res.reason}")
-            res_json = await res.json()
-            logger.info(f"response received, status {res.status}")
+        res = await self.curl_post_async(TOKEN_URL, headers=headers, data=payload, proxy=self.proxy)
+        if res.status_code != 200:
+            raise Exception(f"Failed to gen token: {res.status_code} {res.reason}")
+        res_json = res.json()
+        logger.info(f"response received, status {res.status_code}")
 
         self._token = Token(res_json) 
