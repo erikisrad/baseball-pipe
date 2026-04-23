@@ -2,11 +2,9 @@ import asyncio
 import base64
 import hashlib
 
-import curl_cffi
 import baseball_pipe.utilities as u
 from baseball_pipe.mlbtv_token import Token
-import aiohttp
-from curl_cffi import requests
+import curl_cffi
 import logging
 import os
 
@@ -18,7 +16,7 @@ CLIENT_ID = "0oap7wa857jcvPlZ5355"
 class Account():
 
     def __init__(self,
-                 session:curl_cffi.requests.Session,
+                 session:curl_cffi.Session,
                  proxy:str,
                  u:str=os.environ["u"],
                  p:str=os.environ["p"]):
@@ -98,7 +96,7 @@ class Account():
         }
 
         logger.info(f"sending request to {interact_url}")
-        res = await self.curl_post_async(interact_url, headers=headers, data=payload, proxy=self.proxy)
+        res = await self.curl_post_async(interact_url, headers=headers, data=payload, proxy=self.proxy, impersonate="chrome120")
         if res.status_code != 200:
             raise Exception(f"Failed to post interact: {res.status_code} {res.reason}")
         res_json = res.json()
@@ -134,7 +132,7 @@ class Account():
         }
 
         logger.info(f"sending request to {INTROSPECT_URL}")
-        res = await self.curl_post_async(INTROSPECT_URL, headers=headers, data=payload, proxy=self.proxy)
+        res = await self.curl_post_async(INTROSPECT_URL, headers=headers, data=payload, proxy=self.proxy, impersonate="chrome120")
         if res.status_code != 200:
             raise Exception(f"Failed to post introspect: {res.status_code} {res.reason}")
         res_json = res.json()
@@ -170,7 +168,7 @@ class Account():
         }
 
         logger.info(f"sending request to {IDENTITY_URL}")
-        res = await self.curl_post_async(IDENTITY_URL, headers=headers, data=payload, proxy=self.proxy)
+        res = await self.curl_post_async(IDENTITY_URL, headers=headers, data=payload, proxy=self.proxy, impersonate="chrome120")
         if res.status_code != 200:
             raise Exception(f"Failed to post identity: {res.status_code} {res.reason}")
         res_json = res.json()
@@ -218,7 +216,7 @@ class Account():
         }
 
         logger.info(f"sending request to {CHALLENGE_URL}")
-        res = await self.curl_post_async(CHALLENGE_URL, headers=headers, data=payload, proxy=self.proxy)
+        res = await self.curl_post_async(CHALLENGE_URL, headers=headers, data=payload, proxy=self.proxy, impersonate="chrome120")
         if res.status_code != 200:
             raise Exception(f"Failed to post challenge: {res.status_code} {res.reason}")
         res_json = res.json()
@@ -253,9 +251,9 @@ class Account():
         }
 
         logger.info(f"sending request to {ANSWER_URL}")
-        res = await self.curl_post_async(ANSWER_URL, headers=headers, data=payload, proxy=self.proxy)
+        res = await self.curl_post_async(ANSWER_URL, headers=headers, data=payload, proxy=self.proxy, impersonate="chrome120")
         if res.status_code != 200:
-            raise Exception(f"Failed to post answer: {res.status_code} {res.reason}")
+            raise Exception(f"Failed to post answer: {res.status_code} {res} endxx")
         res_json = res.json()
         logger.info(f"response received, status {res.status_code}")
 
@@ -307,7 +305,7 @@ class Account():
         }
 
         logger.info(f"sending request to {TOKEN_URL}")
-        res = await self.curl_post_async(TOKEN_URL, headers=headers, data=payload, proxy=self.proxy)
+        res = await self.curl_post_async(TOKEN_URL, headers=headers, data=payload, proxy=self.proxy, impersonate="chrome120")
         if res.status_code != 200:
             raise Exception(f"Failed to gen token: {res.status_code} {res.reason}")
         res_json = res.json()
