@@ -253,9 +253,8 @@ class Account():
         logger.info(f"sending request to {ANSWER_URL}")
         res = await self.curl_post_async(ANSWER_URL, headers=headers, data=payload, proxy=self.proxy, impersonate="chrome120")
         if res.status_code != 200:
-            raise Exception(f"Failed to post answer: {res.status_code} {res} endxx")
+            raise Exception(f"Failed to post answer: {res.status_code} {res.reason}")
         res_json = res.json()
-        logger.info(f"response received, status {res.status_code}")
 
         self._answer_state_handle =  res_json["stateHandle"]
         success_with_interaction_code = res_json["successWithInteractionCode"]["value"]

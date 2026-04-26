@@ -1,6 +1,4 @@
 import os
-import socket
-import time
 from aiohttp import web
 import curl_cffi
 from string import Template
@@ -13,6 +11,7 @@ import baseball_pipe.mlb_stats
 import baseball_pipe.utilities as u
 import baseball_pipe.mlbtv_account
 import baseball_pipe.mlbtv_stream
+from baseball_pipe.mlbtv_stream import Stream
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 INDEX_FILE = os.path.join(SCRIPT_DIR, "index.html")
@@ -42,7 +41,7 @@ class WebServer:
 
         self.account = None
         self.token = None
-        self.streams = {}
+        self.streams: dict[str, Stream] = {}
         self.proxy_url = f"http://{proxy_username}:{proxy_password}@{proxy_host}:{proxy_port}"
         self.master_session = None
         self.chrome120_session = None
@@ -75,35 +74,42 @@ class WebServer:
         web.run_app(self.app, host=self.host, port=self.port)
 
     async def decide_serve(self, request: web.Request):
-        client_ip = request.remote or "unknown"
-        if ".key" in request.path :
-            logger.warning("!!!!!hit!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-            
+        real_ip = request.headers.get("X-Real-IP")
+        xff = request.headers.get("X-Forwarded-For")
+        client_ip = real_ip or (xff.split(",")[0] if xff else request.remote)
+
+        logger.info(f"real_ip: {real_ip}, xff: {xff}, remote: {request.remote}")
         logger.info(f"Received request from {client_ip}: {request.method} {request.path}")
 
         if request.method == "OPTIONS":
             return self.serve_options()
 
         if request.path == "/favicon.ico":
-            logger.info(f"favicon.ico requested, returning 404 to {request.host}")
+            logger.info(f"favicon.ico requested, returning 404 to {client_ip}")
             return web.Response(status=404)
 
         if request.path == "/today":
-            logger.info(f"today requested, redirecting to current date for {request.host}")
+            logger.info(f"today requested, redirecting to current date for {client_ip}")
             return web.HTTPFound(location=f"/{u.machine_print_date(u.get_date())}")
         
         if request.path == "/yesterday":
-            logger.info(f"yesterday requested, redirecting to yesterday's date for {request.host}")
+            logger.info(f"yesterday requested, redirecting to yesterday's date for {client_ip}")
             return web.HTTPFound(location=f"/{u.machine_print_date(u.get_date(days_ago=1))}")
         
         if request.path == "/tomorrow":
-            logger.info(f"tomorrow requested, redirecting to tomorrow's date for {request.host}")
+            logger.info(f"tomorrow requested, redirecting to tomorrow's date for {client_ip}")
             return web.HTTPFound(location=f"/{u.machine_print_date(u.get_date(days_ago=-1))}")
 
-        scheme = request.scheme
+        try:
+            scheme = request.headers.get('X-Forwarded-Proto', request.scheme)
+        except Exception:
+            logger.warning(f"could not get scheme from request, defaulting to https")
+            scheme = "https"
+
         host = request.host
         base_url = f"{scheme}://{host}/"
         rel_path = request.match_info['arg']
+        #logger.info(f"base_url: {base_url}, rel_path: {rel_path}")
         
         if rel_path == "baseball_pipe.css":
             css_path = os.path.join(SCRIPT_DIR, "baseball_pipe.css")
@@ -128,7 +134,7 @@ class WebServer:
                 return web.Response(status=404)
             
         # Check for gamePK/mediaId format (e.g., 777654/88c67daa-25e5-4737-9189-6e2295e12661)
-        if '/' in rel_path:
+        if '/' in rel_path and len(rel_path.split('/')) >= 2:
             parts = rel_path.split('/')
 
             if len(parts) == 2 and parts[0].isdigit() and len(parts[0]) == 6 and len(parts[1]) == 36:
@@ -145,10 +151,20 @@ class WebServer:
                     logger.info(f"serving media playlist {parts[2]} for gamePK {parts[0]} and mediaId {parts[1]}")
                     return await self.serve_media_playlist(base_url, parts[0], parts[1], parts[2])
 
-            elif len(parts) >= 3 and (".ts" in parts[-1] or ".aac" in parts[-1] or ".vtt" in parts[-1]):
+            elif len(parts) >= 3 and (".ts" in parts[-1]):
                 suffix = '/'.join(parts[2:])
-                logger.info(f"serving .something file {suffix} for gamePK {parts[0]} and mediaId {parts[1]}")
+                logger.info(f"serving .ts file {suffix} for gamePK {parts[0]} and mediaId {parts[1]}")
                 return await self.serve_media_file(base_url, parts[0], parts[1], suffix)
+            
+            elif len(parts) >= 3 and ".vtt" in parts[-1]:
+                suffix = '/'.join(parts[2:])
+                logger.info(f"serving .vtt file {suffix} for gamePK {parts[0]} and mediaId {parts[1]}")
+                return await self.serve_vtt_file(base_url, parts[0], parts[1], suffix)
+            
+            elif len(parts) >= 3 and (".aac" in parts[-1]):
+                suffix = '/'.join(parts[2:])
+                logger.info(f"serving .aac file {suffix} for gamePK {parts[0]} and mediaId {parts[1]}")
+                return await self.serve_aac_file(base_url, parts[0], parts[1], suffix)
 
         if rel_path and rel_path.isdigit() and len(rel_path) == 8:
             logger.info(f"serving date for {rel_path}")
@@ -349,7 +365,9 @@ class WebServer:
         day_night = game['dayNight'].capitalize()
 
         video_url = f"{base_url}{gamePK}/{mediaId}/master.m3u8"
-        #video_url = "https://dai.google.com/linear/hls/pa/event/k-VHR5unRdusBDqoXAuB0Q/stream/756c3f5a-16bd-4acf-ba61-a5f598871fd2:TUL/master.m3u8" # debug
+        #video_url = "https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_16x9/bipbop_16x9_variant.m3u8" # master debug
+        #video_url = "https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_16x9/gear5/prog_index.m3u8" # best
+        #video_url = "https://dai.google.com/linear/hls/pa/event/k-VHR5unRdusBDqoXAuB0Q/stream/d337505d-c921-4b35-bdd2-8b22646e8522:MRN2/master.m3u8" # debug
 
         if not self.account:
             self.account = baseball_pipe.mlbtv_account.Account(self.chrome120_session, self.proxy_url)
@@ -379,14 +397,13 @@ class WebServer:
             
             else:
                 #broadcast_html = f'<video src="{video_url}" controls autoplay></video>'
-                broadcast_html = f'''<video id="hls-cast-player" class="video-js vjs-default-skin vjs-big-play-centered" controls preload="auto">
+                broadcast_html = f'''<video id="hls-cast-player" class="video-js vjs-default-skin vjs-big-play-centered" controls preload="auto" crossorigin="anonymous">
                 <source src="{video_url}" type="application/x-mpegURL" />
             </video>
 
             <script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
             <script src="https://vjs.zencdn.net/7.20.3/video.min.js"></script>
             <script src="https://unpkg.com/@silvermine/videojs-chromecast@1.5.0/dist/silvermine-videojs-chromecast.min.js"></script>
-
             <script src="/player.js"></script>'''
 
             downloads = f'''<div class="variant-columns">
@@ -396,6 +413,7 @@ class WebServer:
             
             if self.streams[f"{gamePK}/{mediaId}"].variant_playlists:
 
+                
                 for variant in self.streams[f"{gamePK}/{mediaId}"].variant_playlists:
                     xres, yres = variant.stream_info.resolution or ("?", "?")
                     fps = variant.stream_info.frame_rate or "?"
@@ -479,13 +497,14 @@ class WebServer:
         playlist = await self.streams[f"{gamePK}/{mediaId}"].get_media_playlist(base_url, playlist)
         
         return web.Response(
-            text=playlist, 
+            body=playlist.encode("utf-8"),
             content_type="application/vnd.apple.mpegurl",
             headers={
                 "Access-Control-Allow-Origin": "*",
                 "Access-Control-Allow-Headers": "*"
             }
         )
+
     
     async def serve_media_file(self, base_url, gamePK, mediaId, suffix):
         logger.info(f"processing {suffix} file for gamePK {gamePK}, mediaId: {mediaId}")
@@ -513,6 +532,57 @@ class WebServer:
             }
         )
     
+    async def serve_vtt_file(self, base_url, gamePK, mediaId, suffix):
+        logger.info(f"processing {suffix} file for gamePK {gamePK}, mediaId: {mediaId}")
+
+        if not self.account:
+            self.account = baseball_pipe.mlbtv_account.Account(self.chrome120_session, self.proxy_url)
+
+        if not self.token:
+            self.token = await self.account.get_token()
+        
+        if f"{gamePK}/{mediaId}" not in self.streams:
+            self.streams[f"{gamePK}/{mediaId}"] = baseball_pipe.mlbtv_stream.Stream(self.token, gamePK, mediaId, self.master_session, self.proxy_url)
+
+        file = await self.streams[f"{gamePK}/{mediaId}"].get_vtt_file(base_url, suffix)
+        
+        return web.Response(
+            body=file, 
+            content_type="text/vtt",
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "*",
+                # "Content-Length": str(len(file)),
+                # "Accept-Ranges": "bytes"
+            }
+        )
+    
+    async def serve_aac_file(self, base_url, gamePK, mediaId, suffix):
+        logger.info(f"processing {suffix} file for gamePK {gamePK}, mediaId: {mediaId}")
+
+        if not self.account:
+            self.account = baseball_pipe.mlbtv_account.Account(self.chrome120_session, self.proxy_url)
+
+        if not self.token:
+            self.token = await self.account.get_token()
+        
+        if f"{gamePK}/{mediaId}" not in self.streams:
+            self.streams[f"{gamePK}/{mediaId}"] = baseball_pipe.mlbtv_stream.Stream(self.token, gamePK, mediaId, self.master_session, self.proxy_url)
+
+        #stream = baseball_pipe.mlbtv_stream.Stream(self.token, gamePK, mediaId)
+        file = await self.streams[f"{gamePK}/{mediaId}"].get_aac_file(base_url, suffix)
+        
+        return web.Response(
+            body=file, 
+            content_type="audio/aac",
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "*",
+                # "Content-Length": str(len(file)),
+                # "Accept-Ranges": "bytes"
+            }
+        )
+    
     async def serve_key_file(self, base_url, gamePK, mediaId, suffix):
         logger.info(f"processing {suffix} key for gamePK {gamePK}, mediaId: {mediaId}")
 
@@ -527,6 +597,8 @@ class WebServer:
 
         #stream = baseball_pipe.mlbtv_stream.Stream(self.token, gamePK, mediaId)
         file = await self.streams[f"{gamePK}/{mediaId}"].get_key_file(base_url, suffix)
+        logger.info(f"key file content length: {len(file)} bytes")
+        logger.info(f"HEX KEY: {file.hex()}")
         
         return web.Response(
             body=file, 
@@ -534,7 +606,7 @@ class WebServer:
             headers={
                 "Access-Control-Allow-Origin": "*",
                 "Access-Control-Allow-Headers": "*",
-                # "Content-Length": str(len(file)),
+                "Content-Length": str(len(file)),
                 # "Accept-Ranges": "bytes"
             }
         )
@@ -1335,12 +1407,13 @@ class WebServer:
 
     def serve_options(self):
         return web.Response(
-            status=200,
+            status=204, # Standard "No Content" for preflight
             headers={
                 "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "GET, OPTIONS",
-                "Access-Control-Allow-Headers": "*",
-                "Access-Control-Max-Age": "86400"
+                "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Range, Authorization, X-Requested-With", # Explicit is safer than *
+                "Access-Control-Max-Age": "86400",
+                "Access-Control-Expose-Headers": "Content-Length, Content-Range", # Helps the player seek
             }
         )
 

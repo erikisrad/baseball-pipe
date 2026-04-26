@@ -7,6 +7,7 @@ import aiohttp
 import m3u8
 
 GRAPHQL_URL = "https://media-gateway.mlb.com/graphql"
+URI_PATTERN = re.compile(r'URI="([^"]+)"')
 
 logger = logging.getLogger(__name__)
 
@@ -14,6 +15,68 @@ logger = logging.getLogger(__name__)
 #GAME_PK = "777218"
 #MEDIA_ID = "408db4cb-41de-4805-80ea-62700421f33b"
 
+
+def uri_search_and_replace(line, full_url):
+    logger.debug(f"rewriting URL for line {line}")
+    old = URI_PATTERN.search(line)
+    assert old, f"failed to find URI in line: {line}"
+    new = full_url + old.group(1)
+    new_line = URI_PATTERN.sub(f'URI="{new}"', line)
+    return new_line
+
+def rewrite_master_playlist_urls(playlist_content, full_url):
+    lines = playlist_content.split('\n')
+
+    streams:list[str,str] = []
+    prefixes:list[str] = []
+    audios:list[str] = []
+    subtitles:list[str] = []
+
+    for i, line in enumerate(lines):
+
+        if not line:
+            continue
+
+        elif line.startswith("#EXT-X-STREAM-INF"):
+            uri = lines[i+1]
+            logger.debug(f"steam found: {line}, rewriting URL: {uri}")
+            uri = full_url + uri
+            streams.append((line, uri))
+
+        elif line.endswith(".m3u8") and not line.startswith("#"):
+            continue
+           
+        elif line.startswith("#EXT-X-MEDIA:TYPE=AUDIO"):
+            logger.debug(f"audio found: {line}")
+            try:
+                new_line = uri_search_and_replace(line, full_url)
+            except Exception:
+                logger.warning
+                new_line = line
+            audios.append(new_line)
+
+        elif line.startswith("#EXT-X-MEDIA:TYPE=SUBTITLES"):
+            logger.debug(f"subtitle found: {line}")
+            new_line = uri_search_and_replace(line, full_url)
+            subtitles.append(new_line)
+
+        elif line.startswith("#"):
+            logger.debug(f"found prefix line: {line}")
+            prefixes.append(line)
+
+        else:
+            raise Exception(f"unexpected line in master playlist: {line}")
+
+    rewritten = []  
+    rewritten.append('\n'.join(prefixes))
+    rewritten.append('\n'.join(subtitles))
+    rewritten.append('\n'.join(audios))
+    for line, uri in streams:
+        rewritten.append(line)
+        rewritten.append(uri)
+
+    return '\n'.join(rewritten)
+    
 def rewrite_playlist_urls(playlist_content, full_url):
     lines = playlist_content.split('\n')
     rewritten = []
@@ -30,6 +93,14 @@ def rewrite_playlist_urls(playlist_content, full_url):
             else:
                 logger.debug(f"rewriting URL for line {line}")
                 rewritten.append(full_url + line)
+
+        elif "URI=" in line:
+            logger.debug(f"rewriting URL for line {line}")
+            old = URI_PATTERN.search(line)
+            assert old, f"failed to find URI in line: {line}"
+            new = full_url + old.group(1)
+            new_line = URI_PATTERN.sub(f'URI="{new}"', line)
+            rewritten.append(new_line)
 
         elif "#EXT-OATCLS-SCTE35:" in line:
             logger.debug("skipping splice")
@@ -139,6 +210,12 @@ class Stream():
 
     async def get_key_file(self, base_url, suffix):
         return await self._gen_key_file(base_url, suffix)
+    
+    async def get_vtt_file(self, base_url, suffix):
+        return await self._gen_vtt_file(base_url, suffix)
+    
+    async def get_aac_file(self, base_url, suffix):
+        return await self._gen_aac_file(base_url, suffix)
 
     async def _gen_session(self):
 
@@ -340,7 +417,7 @@ class Stream():
             logger.warning("Failed to get ETag from response headers")
             self._etag = ''
 
-        self._master_playlist = rewrite_playlist_urls(res_text, full_url)
+        self._master_playlist = rewrite_master_playlist_urls(res_text, full_url)
 
         variants = m3u8.loads(res_text).playlists
         self.mlbtv_variant_playlists = sorted(
@@ -457,7 +534,7 @@ class Stream():
             #"If-None-Match": {self._etag},
             "Pragma": "no-cache",
             "Priority": "i",
-            "Range": "bytes=0-",
+            #"Range": "bytes=0-",
             #"Referer": "fst.mlb.com/1766168221_MDB1OGRxaDZlZXBlRXlEUmQzNTY_YWxsb3dlZE1lZGlhVHlwZXM9VklERU8sQVVESU8_14681a4b82809b3fc8c860b2f8a9677e609b911cf43d15712fa0ce8a57776b6e/20250808/776825-HD.m3u8"
             "Sec-Ch-Ua": '"Chromium";v="142", "Google Chrome";v="142", "Not_A Brand";v="99"',
             "Sec-Ch-Ua-Mobile": "?0",
@@ -471,7 +548,97 @@ class Stream():
         logger.info(f"sending request to {target}")
         async with self.session.get(target, headers=headers, proxy=self.proxy, ssl=False) as res:
             logger.info("awaiting response...")
-            if res.status not in [200, 206]:
+            if res.status not in [200]:
+                raise Exception(f"Failed to gen {target} file: {res.status} {res.reason}")
+            
+            if res.content_length != 16:
+                raise Exception(f"Unexpected key file size for {target}: {res.content_length} bytes")
+
+            res_data = await res.read()
+            
+            logger.info(f"response received, status {res.status}")
+        try:
+            self._etag = res.headers['ETag']
+        except Exception:
+            logger.warning("Failed to get ETag from response headers")
+            self._etag = ''
+        
+        return res_data
+    
+    async def _gen_vtt_file(self, base_url, suffix):
+        
+        if not self._upstream_base_url:
+            await self._gen_master_playlist_url()
+
+        full_url = f"{base_url}{self.game_pk}/{self.media_id}/"
+        target = self._upstream_base_url + suffix
+
+        headers = {
+            "Accept": "*/*",
+            "Accept-Encoding": "gzip, deflate, br, zstd",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Cache-Control": "no-cache",
+            #"If-Modified-Since": {last_get},
+            #"If-None-Match": {self._etag},
+            "Pragma": "no-cache",
+            "Priority": "i",
+            #"Referer": "fst.mlb.com/1766168221_MDB1OGRxaDZlZXBlRXlEUmQzNTY_YWxsb3dlZE1lZGlhVHlwZXM9VklERU8sQVVESU8_14681a4b82809b3fc8c860b2f8a9677e609b911cf43d15712fa0ce8a57776b6e/20250808/776825-HD.m3u8"
+            # "Sec-Ch-Ua": '"Chromium";v="142", "Google Chrome";v="142", "Not_A Brand";v="99"',
+            # "Sec-Ch-Ua-Mobile": "?0",
+            # "Sec-Ch-Ua-Platform": '"Windows"',
+            "Sec-Fetch-Dest": "empty",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Site": "same-site",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
+        }
+
+        logger.info(f"sending request to {target}")
+        async with self.session.get(target, headers=headers, proxy=self.proxy, ssl=False) as res:
+            logger.info("awaiting response...")
+            if res.status not in [200]:
+                raise Exception(f"Failed to gen {target} file: {res.status} {res.reason}")
+            res_text = await res.text()
+            logger.info(f"response received, status {res.status}")
+        try:
+            self._etag = res.headers['ETag']
+        except Exception:
+            logger.warning("Failed to get ETag from response headers")
+            self._etag = ''
+        
+        return res_text
+    
+    async def _gen_aac_file(self, base_url, suffix):
+        
+        if not self._upstream_base_url:
+            await self._gen_master_playlist_url()
+
+        full_url = f"{base_url}{self.game_pk}/{self.media_id}/"
+        target = self._upstream_base_url + suffix
+
+        headers = {
+            "Accept": "*/*",
+            "Accept-Encoding": "gzip, deflate, br, zstd",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Cache-Control": "no-cache",
+            #"If-Modified-Since": {last_get},
+            #"If-None-Match": {self._etag},
+            "Pragma": "no-cache",
+            "Priority": "u=1, i",
+            #"Range": "bytes=0-638",
+            #"Referer": "fst.mlb.com/1766168221_MDB1OGRxaDZlZXBlRXlEUmQzNTY_YWxsb3dlZE1lZGlhVHlwZXM9VklERU8sQVVESU8_14681a4b82809b3fc8c860b2f8a9677e609b911cf43d15712fa0ce8a57776b6e/20250808/776825-HD.m3u8"
+            "Sec-Ch-Ua": '"Chromium";v="142", "Google Chrome";v="142", "Not_A Brand";v="99"',
+            "Sec-Ch-Ua-Mobile": "?0",
+            "Sec-Ch-Ua-Platform": '"Windows"',
+            "Sec-Fetch-Dest": "empty",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Site": "same-site",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
+        }
+
+        logger.info(f"sending request to {target}")
+        async with self.session.get(target, headers=headers, proxy=self.proxy, ssl=False) as res:
+            logger.info("awaiting response...")
+            if res.status != 200:
                 raise Exception(f"Failed to gen {target} file: {res.status} {res.reason}")
             res_data = await res.read()
             logger.info(f"response received, status {res.status}")
