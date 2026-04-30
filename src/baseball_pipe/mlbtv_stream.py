@@ -168,7 +168,9 @@ class Stream():
         self.media_id = media_id
         self.url = "https://www.mlb.com/tv/g%s/v%s" % (self.game_pk, self.media_id)
         self.session = session
+
         self.proxy = proxy
+        #self.proxy = None
 
         self.reset()
 
@@ -361,7 +363,7 @@ class Stream():
         }
 
         logger.info(f"sending request to {GRAPHQL_URL}")
-        async with self.session.post(GRAPHQL_URL, headers=headers, json=payload, proxy=self.proxy, ssl=False) as res:
+        async with self.session.post(GRAPHQL_URL, headers=headers, proxy=self.proxy, json=payload, ssl=False) as res:
             logger.info("awaiting response...")
             if res.status != 200:
                 raise Exception(f"Failed to gen master playlist url: {res.status} {res.reason}")
@@ -636,7 +638,7 @@ class Stream():
         }
 
         logger.info(f"sending request to {target}")
-        async with self.session.get(target, headers=headers, proxy=self.proxy, ssl=False) as res:
+        async with self.session.get(target, headers=headers,  proxy=self.proxy, ssl=False) as res:
             logger.info("awaiting response...")
             if res.status != 200:
                 raise Exception(f"Failed to gen {target} file: {res.status} {res.reason}")

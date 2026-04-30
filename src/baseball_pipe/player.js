@@ -13,7 +13,7 @@ document.addEventListener('DOMContentLoaded', function() {
       },
       // Note: Silvermine often needs 'chromecast' in the techOrder to 
       // properly hand off the HLS source to the TV hardware.
-      techOrder: [ 'chromecast', 'html5' ], 
+      techOrder: ['html5', 'chromecast'],
       plugins: {
          chromecast: {
             addButtonToControlBar: true,
@@ -73,4 +73,13 @@ document.addEventListener('DOMContentLoaded', function() {
          console.error('GOOGLE SDK: Cast API failed to initialize.');
       }
    };
+
+   // Force HTML5 tech to initialize track menus
+    const src = player.currentSrc();
+    // Force HTML5 to load the playlist first
+    player.src({
+        src: src,
+        type: 'application/x-mpegURL'
+    });
+
 });

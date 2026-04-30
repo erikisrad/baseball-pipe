@@ -11,6 +11,7 @@ import baseball_pipe.mlb_stats
 import baseball_pipe.utilities as u
 import baseball_pipe.mlbtv_account
 import baseball_pipe.mlbtv_stream
+import baseball_pipe.login
 from baseball_pipe.mlbtv_stream import Stream
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -28,6 +29,22 @@ def cors_headers(content_type=None):
             headers["Content-Type"] = content_type
         return headers
 
+@web.middleware
+async def auth_middleware(request, handler):
+    path = request.path
+
+    if path == "/login" or path.startswith("/static"):
+        return await handler(request)
+
+    raw = request.cookies.get("auth")
+    if not raw:
+        raise web.HTTPFound("/login")
+
+    if not baseball_pipe.login.verify_signed_cookie(raw):
+        raise web.HTTPFound("/login")
+
+    return await handler(request)
+
 class WebServer:
     def __init__(self, host="127.0.0.1", port=8080,
                  proxy_username:str=os.environ["proxu"],
@@ -37,7 +54,10 @@ class WebServer:
 
         self.host = host
         self.port = port
-        self.app = web.Application()
+        self.app = web.Application(middlewares=[auth_middleware])
+        self.app.router.add_static("/static", "baseball_pipe/static")
+        self.app.router.add_route("*", "/login", self.decide_serve)
+
 
         self.account = None
         self.token = None
@@ -99,6 +119,20 @@ class WebServer:
         if request.path == "/tomorrow":
             logger.info(f"tomorrow requested, redirecting to tomorrow's date for {client_ip}")
             return web.HTTPFound(location=f"/{u.machine_print_date(u.get_date(days_ago=-1))}")
+        
+        if request.path == "/login":
+            if request.method == "POST":
+                return await baseball_pipe.login.login(request)
+            else:
+                logger.info(f"login requested for {client_ip}")
+                return web.Response(text=open(os.path.join(SCRIPT_DIR, "login.html"), "r").read(), content_type="text/html")
+        
+        if request.path == "/robots.txt":
+            logger.info(f"robots.txt requested for {client_ip}")
+            robots_path = os.path.join(SCRIPT_DIR, "robots.txt")
+            with open(robots_path, 'r') as f:
+                robots_content = f.read()
+            return web.Response(text=robots_content, content_type="text/plain")
 
         try:
             scheme = request.headers.get('X-Forwarded-Proto', request.scheme)
