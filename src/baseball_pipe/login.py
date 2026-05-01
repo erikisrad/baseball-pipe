@@ -23,7 +23,7 @@ def verify_signed_cookie(raw: str) -> bool:
 
     return hmac.compare_digest(sig, expected)
 
-async def login(request):
+async def login(request, client_ip):
     data = await request.post()
     attempt = data.get("password", "")
 
@@ -40,9 +40,11 @@ async def login(request):
             samesite="Strict",
             max_age=60*60*24*30
         )
+        logger.info(f"User logged in successfully from {client_ip}")
         return response
 
     # Wrong password
+    logger.warning(f"Login failed for {client_ip}")
     return web.Response(
         text="""
             <p style='color:red;text-align:center;'>Incorrect password</p>

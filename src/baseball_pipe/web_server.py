@@ -33,7 +33,14 @@ def cors_headers(content_type=None):
 async def auth_middleware(request, handler):
     path = request.path
 
-    if path == "/login" or path.startswith("/static"):
+    if (path == "/login"
+        or path.startswith("/static")
+        or path.endswith(".m3u8")
+        or path.endswith(".ts")
+        or path.endswith(".key")
+        or path.endswith(".vtt")
+        or path.endswith(".aac")):
+
         return await handler(request)
 
     raw = request.cookies.get("auth")
@@ -122,7 +129,7 @@ class WebServer:
         
         if request.path == "/login":
             if request.method == "POST":
-                return await baseball_pipe.login.login(request)
+                return await baseball_pipe.login.login(request, client_ip)
             else:
                 logger.info(f"login requested for {client_ip}")
                 return web.Response(text=open(os.path.join(SCRIPT_DIR, "login.html"), "r").read(), content_type="text/html")
@@ -168,53 +175,58 @@ class WebServer:
                 return web.Response(status=404)
             
         # Check for gamePK/mediaId format (e.g., 777654/88c67daa-25e5-4737-9189-6e2295e12661)
-        if '/' in rel_path and len(rel_path.split('/')) >= 2:
-            parts = rel_path.split('/')
+        try:
+            if '/' in rel_path and len(rel_path.split('/')) >= 2:
+                parts = rel_path.split('/')
 
-            if len(parts) == 2 and parts[0].isdigit() and len(parts[0]) == 6 and len(parts[1]) == 36:
-                logger.info(f"serving stream landing for gamePK {parts[0]} and mediaId {parts[1]}")
-                return await self.serve_stream_landing2(base_url, parts[0], parts[1])
-            
-            elif len(parts ) == 3 and parts[0].isdigit() and len(parts[0]) == 6 and len(parts[1]) == 36:
-
-                if parts[2] == "master.m3u8":
-                    logger.info(f"serving master playlist for gamePK {parts[0]} and mediaId {parts[1]}")
-                    return await self.serve_master_playlist(base_url, parts[0], parts[1])
+                if len(parts) == 2 and parts[0].isdigit() and len(parts[0]) == 6 and len(parts[1]) == 36:
+                    logger.info(f"serving stream landing for gamePK {parts[0]} and mediaId {parts[1]}")
+                    return await self.serve_stream_landing2(base_url, parts[0], parts[1])
                 
-                elif parts[2].endswith(".m3u8"):
-                    logger.info(f"serving media playlist {parts[2]} for gamePK {parts[0]} and mediaId {parts[1]}")
-                    return await self.serve_media_playlist(base_url, parts[0], parts[1], parts[2])
+                elif len(parts ) == 3 and parts[0].isdigit() and len(parts[0]) == 6 and len(parts[1]) == 36:
 
-            elif len(parts) >= 3 and (".ts" in parts[-1]):
-                suffix = '/'.join(parts[2:])
-                logger.info(f"serving .ts file {suffix} for gamePK {parts[0]} and mediaId {parts[1]}")
-                return await self.serve_media_file(base_url, parts[0], parts[1], suffix)
+                    if parts[2] == "master.m3u8":
+                        logger.info(f"serving master playlist for gamePK {parts[0]} and mediaId {parts[1]}")
+                        return await self.serve_master_playlist(base_url, parts[0], parts[1])
+                    
+                    elif parts[2].endswith(".m3u8"):
+                        logger.info(f"serving media playlist {parts[2]} for gamePK {parts[0]} and mediaId {parts[1]}")
+                        return await self.serve_media_playlist(base_url, parts[0], parts[1], parts[2])
+
+                elif len(parts) >= 3 and (".ts" in parts[-1]):
+                    suffix = '/'.join(parts[2:])
+                    logger.info(f"serving .ts file {suffix} for gamePK {parts[0]} and mediaId {parts[1]}")
+                    return await self.serve_media_file(base_url, parts[0], parts[1], suffix)
+                
+                elif len(parts) >= 3 and ".vtt" in parts[-1]:
+                    suffix = '/'.join(parts[2:])
+                    logger.info(f"serving .vtt file {suffix} for gamePK {parts[0]} and mediaId {parts[1]}")
+                    return await self.serve_vtt_file(base_url, parts[0], parts[1], suffix)
+                
+                elif len(parts) >= 3 and (".aac" in parts[-1]):
+                    suffix = '/'.join(parts[2:])
+                    logger.info(f"serving .aac file {suffix} for gamePK {parts[0]} and mediaId {parts[1]}")
+                    return await self.serve_aac_file(base_url, parts[0], parts[1], suffix)
+
+            if rel_path and rel_path.isdigit() and len(rel_path) == 8:
+                logger.info(f"serving date for {rel_path}")
+                return await self.serve_date3(base_url, rel_path)
+
+            elif rel_path and rel_path.isdigit() and len(rel_path) <= 8:
+                logger.info(f"serving gamePK for {rel_path}")
+                return await self.serve_gamePK2(base_url, rel_path)
             
-            elif len(parts) >= 3 and ".vtt" in parts[-1]:
+            elif len(parts) >= 3 and ".key" in parts[-1]:
                 suffix = '/'.join(parts[2:])
-                logger.info(f"serving .vtt file {suffix} for gamePK {parts[0]} and mediaId {parts[1]}")
-                return await self.serve_vtt_file(base_url, parts[0], parts[1], suffix)
+                logger.info(f"serving .key file {suffix} for gamePK {parts[0]} and mediaId {parts[1]}")
+                return await self.serve_key_file(base_url, parts[0], parts[1], suffix)
+
+            else:
+                logger.warning(f"defaulting to 404 {rel_path}")
+                return web.Response(status=404)
             
-            elif len(parts) >= 3 and (".aac" in parts[-1]):
-                suffix = '/'.join(parts[2:])
-                logger.info(f"serving .aac file {suffix} for gamePK {parts[0]} and mediaId {parts[1]}")
-                return await self.serve_aac_file(base_url, parts[0], parts[1], suffix)
-
-        if rel_path and rel_path.isdigit() and len(rel_path) == 8:
-            logger.info(f"serving date for {rel_path}")
-            return await self.serve_date3(base_url, rel_path)
-
-        elif rel_path and rel_path.isdigit() and len(rel_path) <= 8:
-            logger.info(f"serving gamePK for {rel_path}")
-            return await self.serve_gamePK2(base_url, rel_path)
-        
-        elif len(parts) >= 3 and ".key" in parts[-1]:
-            suffix = '/'.join(parts[2:])
-            logger.info(f"serving .key file {suffix} for gamePK {parts[0]} and mediaId {parts[1]}")
-            return await self.serve_key_file(base_url, parts[0], parts[1], suffix)
-
-        else:
-            logger.warning(f"defaulting to current date for arg {rel_path}")
+        except Exception as err:
+            logger.warning(f"hit exception when processing request {rel_path}\n{err}")
             return web.Response(status=404)
 
     async def serve_master_playlist(self, base_url, gamePK, mediaId):

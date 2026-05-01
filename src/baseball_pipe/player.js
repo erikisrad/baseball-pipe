@@ -13,7 +13,7 @@ document.addEventListener('DOMContentLoaded', function() {
       },
       // Note: Silvermine often needs 'chromecast' in the techOrder to 
       // properly hand off the HLS source to the TV hardware.
-      techOrder: ['html5', 'chromecast'],
+      techOrder: ['chromecast', 'html5'],
       plugins: {
          chromecast: {
             addButtonToControlBar: true,
