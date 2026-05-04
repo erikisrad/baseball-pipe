@@ -45,9 +45,11 @@ async def auth_middleware(request, handler):
 
     raw = request.cookies.get("auth")
     if not raw:
+        logger.info(f"sending redirect to login for {request.remote}")
         raise web.HTTPFound("/login")
 
     if not baseball_pipe.login.verify_signed_cookie(raw):
+        logger.warning(f"sending bad cookie redirect to login for {request.remote}")
         raise web.HTTPFound("/login")
 
     return await handler(request)
