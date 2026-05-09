@@ -135,6 +135,14 @@ class WebServer:
             else:
                 logger.info(f"login requested for {client_ip}")
                 return web.Response(text=open(os.path.join(SCRIPT_DIR, "login.html"), "r").read(), content_type="text/html")
+            
+        if "/bpad/" in request.path:
+            logger.info(f"bpad requested for {client_ip}")
+            bpad_path = os.path.join(SCRIPT_DIR, "static", "bp4m.ts")
+            if os.path.exists(bpad_path):
+                return web.FileResponse(bpad_path)
+            else:
+                return web.Response(status=404)
         
         if request.path == "/robots.txt":
             logger.info(f"robots.txt requested for {client_ip}")
@@ -142,6 +150,8 @@ class WebServer:
             with open(robots_path, 'r') as f:
                 robots_content = f.read()
             return web.Response(text=robots_content, content_type="text/plain")
+        
+
 
         try:
             scheme = request.headers.get('X-Forwarded-Proto', request.scheme)

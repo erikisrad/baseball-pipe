@@ -1,6 +1,8 @@
 import logging
 import re
+import time
 from .mlbtv_token import Token
+from urllib.parse import urlparse
 
 from . import utilities as u
 import aiohttp
@@ -78,97 +80,8 @@ def rewrite_master_playlist_urls(playlist_content, full_url):
 
     return '\n'.join(rewritten)
     
-def rewrite_playlist_urls_backwards(playlist_content, full_url):
-    lines = playlist_content.split('\n')[::-1]
-    rewritten = []
-    cued_out = False
-    ts_count = 0
-
-    for line in lines:
-
-        if not line:
-            continue
-
-        if line and not line.startswith('#'):
-            if cued_out:
-                logger.debug(f"skipping ad: {line}")
-            else:
-                logger.debug(f"rewriting URL for line {line}")
-                rewritten.append(full_url + line)
-                ts_count += 1
-
-        elif "URI=" in line:
-            if cued_out:
-                logger.debug(f"skipping ad: {line}")
-            else:
-                rewritten.append(uri_search_and_replace(line, full_url))
-
-        elif line.startswith("#EXT-OATCLS-SCTE35:"):
-            logger.debug("skipping splice")
-
-        elif line.startswith("#EXT-X-PLAYLIST-TYPE:"):
-            res = re.search(PLAYLIST_TYPE_PATTERN, line)
-            playlist_type = res.group(1)
-            logger.debug(f"playlist type: {playlist_type}")
-
-            if playlist_type == "EVENT":
-                rewritten.append("#EXT-X-PLAYLIST-TYPE:LIVE")
-            else:
-                rewritten.append(line)
-
-        elif line.startswith("#EXT-X-CUE-OUT-CONT:"):
-            logger.debug("skipping cue out continuation")
-
-        elif line.startswith("#EXT-X-CUE-OUT:"):
-            if not cued_out:
-                logger.warning("received unexpected #EXT-X-CUE-OUT")
-
-            cued_out = False
-            logger.debug("cue ended")
-
-        elif line.startswith("#EXT-X-CUE-IN"):
-            if cued_out:
-                logger.warning("received unexpected #EXT-X-CUE-IN")
-
-            if ts_count > 100:
-                cued_out = True
-                rewritten.append("#EXT-X-DISCONTINUITY") # throw one of these bad boys in there since we fucked with the timeline so much
-                logger.debug("cue start")
-            else:
-                logger.debug("too early to cue out")
-
-        elif line.startswith("#EXTINF:"):
-            if cued_out:
-                logger.debug("skipping ad cue inf")
-            else:
-                logger.debug("writting cue inf")
-                rewritten.append(line)
-
-        elif (line.startswith("#EXTM3U")
-              or line.startswith("#EXT-X-VERSION:")
-              or line.startswith("#EXT-X-TARGETDURATION:")
-              or line.startswith("#EXT-X-MEDIA-SEQUENCE:")
-              or line.startswith("#EXT-X-PROGRAM-DATE-TIME")
-              or line.startswith("#EXT-X-ENDLIST")) and not cued_out:
-            
-            logger.debug(f"keeping generic line {line}")
-            rewritten.append(line)
-
-        # elif "#EXT-X-PROGRAM-DATE-TIME:" in line:
-        #     logger.debug(f"cutting #EXT-X-PROGRAM-DATE-TIME: line {line}")
-
-        elif cued_out:
-            logger.debug(f"skipping misc line during ad: {line}")
-
-        else:
-            logger.warning(f"keeping unknown line: {line}")
-            rewritten.append(line)
-
-    return '\n'.join(rewritten[::-1])
-
 def rewrite_media_playlist(playlist_content, full_url):
     lines = playlist_content.split('\n')
-    rewritten = []
     max_lines_read = 10
 
     for i, line in enumerate(lines):
@@ -178,14 +91,15 @@ def rewrite_media_playlist(playlist_content, full_url):
         
         if line.startswith("#EXT-X-PLAYLIST-TYPE:"):
             if "VOD" in line:
+                logger.debug("this is a vod playlist")
                 return rewrite_vod_playlist(lines, full_url)
+                
             else:
+                logger.debug("this is a live playlist")
                 return rewrite_live_playlist(lines, full_url)
-            
-def rewrite_live_playlist(lines, full_url):
-    return None
 
 def rewrite_vod_playlist(lines, full_url):
+    start = time.perf_counter()
     rewritten = []
     cued_out = False
 
@@ -194,21 +108,26 @@ def rewrite_vod_playlist(lines, full_url):
         if not line:
             continue
 
-        if not line.startswith('#'):
-            if cued_out:
-                logger.debug(f"skipping ad: {line}")
-            else:
-                logger.debug(f"rewriting URL for line {line}")
-                rewritten.append(full_url + line)
+        elif line.startswith("#EXT-X-CUE-IN"):
+            if not cued_out:
+                logger.warning("received unexpected #EXT-X-CUE-IN")
+
+            cued_out = False
+            rewritten.append("#EXT-X-DISCONTINUITY") # throw one of these bad boys in there since we fucked with the timeline so much
+            logger.debug("cued in")
+
+        elif cued_out:
+            if line.startswith("#EXT-X-CUE-OUT"):
+                logger.warning("received unexpected #EXT-X-CUE-OUT")
+
+            logger.debug(f"skipping line while cued out: {line}")
+
+        elif not line.startswith('#'):
+            logger.debug(f"rewriting URL for line {line}")
+            rewritten.append(full_url + line)
 
         elif "URI=" in line:
-            if cued_out:
-                logger.debug(f"skipping ad: {line}")
-            else:
-                rewritten.append(uri_search_and_replace(line, full_url))
-
-        elif line.startswith("#EXT-OATCLS-SCTE35:"):
-            logger.debug("skipping splice")
+            rewritten.append(uri_search_and_replace(line, full_url))
 
         elif line.startswith("#EXT-X-PLAYLIST-TYPE:"):
             res = re.search(PLAYLIST_TYPE_PATTERN, line)
@@ -220,54 +139,89 @@ def rewrite_vod_playlist(lines, full_url):
             else:
                 rewritten.append(line)
 
-        elif line.startswith("#EXT-X-CUE-OUT-CONT:"):
-            logger.debug("skipping cue out continuation")
-
-        elif line.startswith("#EXT-X-CUE-OUT:"):
-            if cued_out:
-                logger.warning("received unexpected #EXT-X-CUE-OUT")
-
+        elif line.startswith("#EXT-X-CUE-OUT"):
             cued_out = True
             logger.debug("cued out")
 
-        elif line.startswith("#EXT-X-CUE-IN"):
-            if not cued_out:
-                logger.warning("received unexpected #EXT-X-CUE-IN")
-
-            cued_out = False
-            rewritten.append("#EXT-X-DISCONTINUITY") # throw one of these bad boys in there since we fucked with the timeline so much
-            logger.debug("cued in")
-
-        elif line.startswith("#EXTINF:"):
-            if cued_out:
-                logger.debug("skipping ad cue inf")
-
-            else:
-                logger.debug("writting cue inf")
-                rewritten.append(line)
-
+        #anything we just want to reprint
         elif (line.startswith("#EXTM3U")
+              or line.startswith("#EXTINF:")
               or line.startswith("#EXT-X-VERSION:")
               or line.startswith("#EXT-X-TARGETDURATION:")
               or line.startswith("#EXT-X-MEDIA-SEQUENCE:")
               or line.startswith("#EXT-X-PROGRAM-DATE-TIME")
-              or line.startswith("#EXT-X-ENDLIST")) and not cued_out:
+              or line.startswith("#EXT-X-ENDLIST")):
             
             logger.debug(f"keeping generic line {line}")
             rewritten.append(line)
 
-        # elif "#EXT-X-PROGRAM-DATE-TIME:" in line:
-        #     logger.debug(f"cutting #EXT-X-PROGRAM-DATE-TIME: line {line}")
+        #anything we want to throw away
+        elif (line.startswith("#EXT-X-CUE-OUT-CONT:")
+              or line.startswith("#EXT-OATCLS-SCTE35")):
 
-        elif cued_out:
-            logger.debug(f"skipping misc line during ad: {line}")
+            logger.debug(f"skipping generic line {line}")
 
         else:
             logger.warning(f"keeping unknown line: {line}")
             rewritten.append(line)
 
+    elapsed = time.perf_counter() - start
+    logger.info(f"rewrote vod playlist in {elapsed:.2f} seconds")
     return '\n'.join(rewritten)
 
+def rewrite_live_playlist(lines, full_url):
+    start = time.perf_counter()
+    rewritten = []
+
+    for line in lines:
+
+        if not line:
+            continue
+
+        elif not line.startswith('#'):
+            logger.debug(f"rewriting URL for line {line}")
+            rewritten.append(full_url + line)
+
+        elif "URI=" in line:
+            rewritten.append(uri_search_and_replace(line, full_url))
+
+        elif line.startswith("#EXT-X-PLAYLIST-TYPE:"):
+            res = re.search(PLAYLIST_TYPE_PATTERN, line)
+            playlist_type = res.group(1)
+            logger.debug(f"playlist type: {playlist_type}")
+
+            if playlist_type == "EVENT":
+                rewritten.append("#EXT-X-PLAYLIST-TYPE:LIVE")
+            else:
+                rewritten.append(line)
+
+        #anything we just want to reprint
+        elif (line.startswith("#EXTM3U")
+              or line.startswith("#EXTINF:")
+              or line.startswith("#EXT-X-CUE-IN")
+              or line.startswith("#EXT-X-CUE-OUT")
+              or line.startswith("#EXT-X-VERSION:")
+              or line.startswith("#EXT-X-TARGETDURATION:")
+              or line.startswith("#EXT-X-MEDIA-SEQUENCE:")
+              or line.startswith("#EXT-X-PROGRAM-DATE-TIME")
+              or line.startswith("#EXT-X-ENDLIST")):
+            
+            logger.debug(f"keeping generic line {line}")
+            rewritten.append(line)
+
+        #anything we want to throw away
+        elif (line.startswith("#EXT-X-CUE-OUT-CONT:")
+              or line.startswith("#EXT-OATCLS-SCTE35")):
+
+            logger.debug(f"skipping generic line {line}")
+
+        else:
+            logger.warning(f"keeping unknown line: {line}")
+            rewritten.append(line)
+
+    elapsed = time.perf_counter() - start
+    logger.info(f"rewrote live playlist in {elapsed:.2f} seconds")
+    return '\n'.join(rewritten)
 
 class Stream():
 
