@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Login</title>
+    <link rel="stylesheet" href="/static/baseball_pipe.css">
+</head>
+<body>
+
+    <div class="login-wrapper">
+        <p>Please enter the password to continue</p>
+
+        <form method="POST" action="/login" id="login-form">
+            <input type="password" id="password" name="password" class="input" required>
+            <input type="hidden" name="timezone" id="tz" value="UTC">
+        </form>
+    </div>
+
+    <script>
+        document.getElementById("tz").value = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    </script>
+
+</body>
+</html>

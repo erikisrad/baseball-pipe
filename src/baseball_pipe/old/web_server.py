@@ -7,12 +7,12 @@ from urllib.parse import urljoin
 import logging as logger
 
 import aiohttp
-import baseball_pipe.mlb_stats
-import baseball_pipe.utilities as u
-import baseball_pipe.mlbtv_account
-import baseball_pipe.mlbtv_stream
-import baseball_pipe.login
-from baseball_pipe.mlbtv_stream import Stream
+import baseball_pipe.old.mlb_stats
+import baseball_pipe.old.utilities as u
+import baseball_pipe.old.mlbtv_account
+import baseball_pipe.old.mlbtv_stream
+import baseball_pipe.old.login
+from baseball_pipe.old.mlbtv_stream import Stream
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 INDEX_FILE = os.path.join(SCRIPT_DIR, "index.html")
@@ -48,7 +48,7 @@ async def auth_middleware(request, handler):
         logger.info(f"sending redirect to login for {request.remote}")
         raise web.HTTPFound("/login")
 
-    if not baseball_pipe.login.verify_signed_cookie(raw):
+    if not baseball_pipe.old.login.verify_signed_cookie(raw):
         logger.warning(f"sending bad cookie redirect to login for {request.remote}")
         raise web.HTTPFound("/login")
 
@@ -66,7 +66,6 @@ class WebServer:
         self.app = web.Application(middlewares=[auth_middleware])
         self.app.router.add_static("/static", "baseball_pipe/static")
         self.app.router.add_route("*", "/login", self.decide_serve)
-
 
         self.account = None
         self.token = None
@@ -129,7 +128,7 @@ class WebServer:
         
         if request.path == "/login":
             if request.method == "POST":
-                return await baseball_pipe.login.login(request, client_ip)
+                return await baseball_pipe.old.login.login(request, client_ip)
             else:
                 logger.info(f"login requested for {client_ip}")
                 return web.Response(text=open(os.path.join(SCRIPT_DIR, "login.html"), "r").read(), content_type="text/html")
@@ -243,13 +242,13 @@ class WebServer:
         logger.info(f"processing master playlist for gamePK {gamePK}, mediaId: {mediaId}")
 
         if not self.account:
-            self.account = baseball_pipe.mlbtv_account.Account(self.chrome120_session, self.proxy_url)
+            self.account = baseball_pipe.old.mlbtv_account.Account(self.chrome120_session, self.proxy_url)
 
         if not self.token:
             self.token = await self.account.get_token()
         
         if f"{gamePK}/{mediaId}" not in self.streams:
-            self.streams[f"{gamePK}/{mediaId}"] = baseball_pipe.mlbtv_stream.Stream(self.token, gamePK, mediaId, self.master_session, self.proxy_url)
+            self.streams[f"{gamePK}/{mediaId}"] = baseball_pipe.old.mlbtv_stream.Stream(self.token, gamePK, mediaId, self.master_session, self.proxy_url)
 
         #stream = baseball_pipe.mlbtv_stream.Stream(self.token, gamePK, mediaId)
         playlist = await self.streams[f"{gamePK}/{mediaId}"].get_master_playlist(base_url)
@@ -266,7 +265,7 @@ class WebServer:
     async def serve_stream_landing(self, base_url, gamePK, mediaId):
         logger.info(f"processing stream landing for gamepk {gamePK}, mediaID {mediaId}")
 
-        game = await baseball_pipe.mlb_stats.get_game_content(gamePK)
+        game = await baseball_pipe.old.mlb_stats.get_game_content(gamePK)
         broadcasts = game.get("broadcasts", [])
 
         selected_broadcast = None
@@ -351,13 +350,13 @@ class WebServer:
 """
         
         if not self.account:
-            self.account = baseball_pipe.mlbtv_account.Account(self.chrome120_session, self.proxy_url)
+            self.account = baseball_pipe.old.mlbtv_account.Account(self.chrome120_session, self.proxy_url)
 
         if not self.token:
             self.token = await self.account.get_token()
         
         if f"{gamePK}/{mediaId}" not in self.streams:
-            self.streams[f"{gamePK}/{mediaId}"] = baseball_pipe.mlbtv_stream.Stream(self.token, gamePK, mediaId, self.master_session, self.proxy_url)
+            self.streams[f"{gamePK}/{mediaId}"] = baseball_pipe.old.mlbtv_stream.Stream(self.token, gamePK, mediaId, self.master_session, self.proxy_url)
 
         try:
             master_playlist_url = await self.streams[f"{gamePK}/{mediaId}"].get_master_playlist_url()
@@ -396,7 +395,7 @@ class WebServer:
         logger.info(f"processing stream landing for gamepk {gamePK}, mediaID {mediaId}")
         html_file = Path(os.path.join(SCRIPT_DIR, "stream_landing.html"))
 
-        game = await baseball_pipe.mlb_stats.get_game_content(gamePK)
+        game = await baseball_pipe.old.mlb_stats.get_game_content(gamePK)
         broadcasts = game.get("broadcasts", [])
 
         selected_broadcast = None
@@ -426,13 +425,13 @@ class WebServer:
         #video_url = "https://dai.google.com/linear/hls/pa/event/k-VHR5unRdusBDqoXAuB0Q/stream/d337505d-c921-4b35-bdd2-8b22646e8522:MRN2/master.m3u8" # debug
 
         if not self.account:
-            self.account = baseball_pipe.mlbtv_account.Account(self.chrome120_session, self.proxy_url)
+            self.account = baseball_pipe.old.mlbtv_account.Account(self.chrome120_session, self.proxy_url)
 
         if not self.token:
             self.token = await self.account.get_token()
         
         if f"{gamePK}/{mediaId}" not in self.streams:
-            self.streams[f"{gamePK}/{mediaId}"] = baseball_pipe.mlbtv_stream.Stream(self.token, gamePK, mediaId, self.master_session, self.proxy_url)
+            self.streams[f"{gamePK}/{mediaId}"] = baseball_pipe.old.mlbtv_stream.Stream(self.token, gamePK, mediaId, self.master_session, self.proxy_url)
 
         try:
             master_playlist_url = await self.streams[f"{gamePK}/{mediaId}"].get_master_playlist_url()
@@ -541,13 +540,13 @@ class WebServer:
         logger.info(f"processing {playlist} playlist for gamePK {gamePK}, mediaId: {mediaId}")
 
         if not self.account:
-            self.account = baseball_pipe.mlbtv_account.Account(self.chrome120_session, self.proxy_url)
+            self.account = baseball_pipe.old.mlbtv_account.Account(self.chrome120_session, self.proxy_url)
 
         if not self.token:
             self.token = await self.account.get_token()
         
         if f"{gamePK}/{mediaId}" not in self.streams:
-            self.streams[f"{gamePK}/{mediaId}"] = baseball_pipe.mlbtv_stream.Stream(self.token, gamePK, mediaId, self.master_session, self.proxy_url)
+            self.streams[f"{gamePK}/{mediaId}"] = baseball_pipe.old.mlbtv_stream.Stream(self.token, gamePK, mediaId, self.master_session, self.proxy_url)
 
         #stream = baseball_pipe.mlbtv_stream.Stream(self.token, gamePK, mediaId)
         playlist = await self.streams[f"{gamePK}/{mediaId}"].get_media_playlist(base_url, playlist)
@@ -566,13 +565,13 @@ class WebServer:
         logger.info(f"processing {suffix} file for gamePK {gamePK}, mediaId: {mediaId}")
 
         if not self.account:
-            self.account = baseball_pipe.mlbtv_account.Account(self.chrome120_session, self.proxy_url)
+            self.account = baseball_pipe.old.mlbtv_account.Account(self.chrome120_session, self.proxy_url)
 
         if not self.token:
             self.token = await self.account.get_token()
         
         if f"{gamePK}/{mediaId}" not in self.streams:
-            self.streams[f"{gamePK}/{mediaId}"] = baseball_pipe.mlbtv_stream.Stream(self.token, gamePK, mediaId, self.master_session, self.proxy_url)
+            self.streams[f"{gamePK}/{mediaId}"] = baseball_pipe.old.mlbtv_stream.Stream(self.token, gamePK, mediaId, self.master_session, self.proxy_url)
 
         #stream = baseball_pipe.mlbtv_stream.Stream(self.token, gamePK, mediaId)
         file = await self.streams[f"{gamePK}/{mediaId}"].get_media_file(base_url, suffix)
@@ -592,13 +591,13 @@ class WebServer:
         logger.info(f"processing {suffix} file for gamePK {gamePK}, mediaId: {mediaId}")
 
         if not self.account:
-            self.account = baseball_pipe.mlbtv_account.Account(self.chrome120_session, self.proxy_url)
+            self.account = baseball_pipe.old.mlbtv_account.Account(self.chrome120_session, self.proxy_url)
 
         if not self.token:
             self.token = await self.account.get_token()
         
         if f"{gamePK}/{mediaId}" not in self.streams:
-            self.streams[f"{gamePK}/{mediaId}"] = baseball_pipe.mlbtv_stream.Stream(self.token, gamePK, mediaId, self.master_session, self.proxy_url)
+            self.streams[f"{gamePK}/{mediaId}"] = baseball_pipe.old.mlbtv_stream.Stream(self.token, gamePK, mediaId, self.master_session, self.proxy_url)
 
         file = await self.streams[f"{gamePK}/{mediaId}"].get_vtt_file(base_url, suffix)
         
@@ -617,13 +616,13 @@ class WebServer:
         logger.info(f"processing {suffix} file for gamePK {gamePK}, mediaId: {mediaId}")
 
         if not self.account:
-            self.account = baseball_pipe.mlbtv_account.Account(self.chrome120_session, self.proxy_url)
+            self.account = baseball_pipe.old.mlbtv_account.Account(self.chrome120_session, self.proxy_url)
 
         if not self.token:
             self.token = await self.account.get_token()
         
         if f"{gamePK}/{mediaId}" not in self.streams:
-            self.streams[f"{gamePK}/{mediaId}"] = baseball_pipe.mlbtv_stream.Stream(self.token, gamePK, mediaId, self.master_session, self.proxy_url)
+            self.streams[f"{gamePK}/{mediaId}"] = baseball_pipe.old.mlbtv_stream.Stream(self.token, gamePK, mediaId, self.master_session, self.proxy_url)
 
         #stream = baseball_pipe.mlbtv_stream.Stream(self.token, gamePK, mediaId)
         file = await self.streams[f"{gamePK}/{mediaId}"].get_aac_file(base_url, suffix)
@@ -643,13 +642,13 @@ class WebServer:
         logger.info(f"processing {suffix} key for gamePK {gamePK}, mediaId: {mediaId}")
 
         if not self.account:
-            self.account = baseball_pipe.mlbtv_account.Account(self.chrome120_session, self.proxy_url)
+            self.account = baseball_pipe.old.mlbtv_account.Account(self.chrome120_session, self.proxy_url)
 
         if not self.token:
             self.token = await self.account.get_token()
         
         if f"{gamePK}/{mediaId}" not in self.streams:
-            self.streams[f"{gamePK}/{mediaId}"] = baseball_pipe.mlbtv_stream.Stream(self.token, gamePK, mediaId, self.master_session, self.proxy_url)
+            self.streams[f"{gamePK}/{mediaId}"] = baseball_pipe.old.mlbtv_stream.Stream(self.token, gamePK, mediaId, self.master_session, self.proxy_url)
 
         #stream = baseball_pipe.mlbtv_stream.Stream(self.token, gamePK, mediaId)
         file = await self.streams[f"{gamePK}/{mediaId}"].get_key_file(base_url, suffix)
@@ -669,7 +668,7 @@ class WebServer:
 
     async def serve_gamePK(self, base_url, gamePK):
         logger.info(f"processing gamePK: {gamePK}")
-        game = await baseball_pipe.mlb_stats.get_game_content(gamePK)
+        game = await baseball_pipe.old.mlb_stats.get_game_content(gamePK)
         broadcasts = game.get("broadcasts", [])
 
         home_name = game["teams"]["home"]["team"]["name"]
@@ -797,7 +796,7 @@ class WebServer:
         logger.info(f"processing gamePK: {gamePK}")
         html_file = Path(os.path.join(SCRIPT_DIR, "gamePK.html"))
 
-        game = await baseball_pipe.mlb_stats.get_game_content(gamePK)
+        game = await baseball_pipe.old.mlb_stats.get_game_content(gamePK)
         broadcasts = game.get("broadcasts", [])
 
         home_name = game["teams"]["home"]["team"]["name"]
@@ -886,7 +885,7 @@ class WebServer:
 
         if date_str:
             date = u.get_date(start_date=date_str)
-            result = await baseball_pipe.mlb_stats.get_games_on_date(start_date=date)
+            result = await baseball_pipe.old.mlb_stats.get_games_on_date(start_date=date)
             if isinstance(result, dict) and not result:
                 games = []
             else:
@@ -896,7 +895,7 @@ class WebServer:
             days_ago = 60
             start_date = u.get_date()
             end_date = u.get_date(start_date=start_date, days_ago=days_ago)
-            result = await baseball_pipe.mlb_stats.get_games_on_date(start_date=start_date, 
+            result = await baseball_pipe.old.mlb_stats.get_games_on_date(start_date=start_date, 
                                                                         end_date=end_date)
             if isinstance(result, dict) and not result:
                 games = []
@@ -1038,7 +1037,7 @@ class WebServer:
 
         if date_str:
             date = u.get_date(start_date=date_str)
-            result = await baseball_pipe.mlb_stats.get_games_on_date(start_date=date)
+            result = await baseball_pipe.old.mlb_stats.get_games_on_date(start_date=date)
             if isinstance(result, dict) and not result:
                 games = []
             else:
@@ -1048,7 +1047,7 @@ class WebServer:
             days_ago = 60
             start_date = u.get_date()
             end_date = u.get_date(start_date=start_date, days_ago=days_ago)
-            result = await baseball_pipe.mlb_stats.get_games_on_date(start_date=start_date, 
+            result = await baseball_pipe.old.mlb_stats.get_games_on_date(start_date=start_date, 
                                                                         end_date=end_date)
             if isinstance(result, dict) and not result:
                 games = []
@@ -1373,7 +1372,7 @@ class WebServer:
 
         if date_str:
             date = u.get_date(start_date=date_str)
-            result = await baseball_pipe.mlb_stats.get_games_on_date(start_date=date)
+            result = await baseball_pipe.old.mlb_stats.get_games_on_date(start_date=date)
             date, games = result
             
         yesterday = (date - u.timedelta(days=1)).strftime("%Y%m%d")

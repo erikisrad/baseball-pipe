@@ -1,17 +1,11 @@
 import os
 from aiohttp import web
-import curl_cffi
-from string import Template
-from pathlib import Path
-from urllib.parse import urljoin
 import logging as logger
 
 import aiohttp
-import baseball_pipe.old.mlb_stats
-import baseball_pipe.old.utilities as u
-import baseball_pipe.old.mlbtv_account
-import baseball_pipe.old.mlbtv_stream
-import baseball_pipe.old.login
+import baseball_pipe.misc.utilities as u
+import baseball_pipe.login
+import baseball_pipe.router
 from baseball_pipe.old.mlbtv_stream import Stream
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -49,30 +43,34 @@ class WebServer:
 
         self.host = host
         self.port = port
+        self.proxy_url = proxy_url
         self.app = web.Application(middlewares=[auth_middleware])
         self.app.router.add_static("/static", "baseball_pipe/static")
-        self.app.router.add_route("*", "/login", self.decide_serve)
-
-
-        self.account = None
-        self.token = None
-        self.streams: dict[str, Stream] = {}
-        self.proxy_url = f"http://{proxy_username}:{proxy_password}@{proxy_host}:{proxy_port}"
-        self.master_session = None
-        self.chrome120_session = None
 
     async def on_startup(self, app):
-        # self.master_session = aiohttp.ClientSession(
-        #     cookie_jar=aiohttp.CookieJar(unsafe=True),
-        #     connector=aiohttp.TCPConnector(
-        #         family=socket.AF_INET,   # force IPv4 (Bright Data + Okta friendly)
-        #         ssl=False                # matches your requests
-        #     )
-        # )
-
         self.master_session = aiohttp.ClientSession()
-        self.chrome120_session = curl_cffi.Session(impersonate="chrome120")
 
     async def on_cleanup(self, app):
         if self.master_session:
             await self.master_session.close()
+
+    def start(self):
+
+        self.app.on_startup.append(self.on_startup)
+        self.app.on_cleanup.append(self.on_cleanup)
+
+        # Named keyword routes
+        self.app.router.add_get("/today", baseball_pipe.router.serve_today)
+        self.app.router.add_get("/yesterday", baseball_pipe.router.serve_yesterday)
+        self.app.router.add_get("/tomorrow", baseball_pipe.router.serve_tomorrow)
+        self.app.router.add_route("*", "/login", baseball_pipe.login.login)
+
+        # Regex-constrained path params (aiohttp supports this natively)
+        # self.app.router.add_get(r"/{date:\d{8}}", self.serve_date3)
+        # self.app.router.add_get(r"/{gamePK:\d{1,6}}", self.serve_gamePK2)
+        # self.app.router.add_get("/{gamePK}/{mediaId}/master.m3u8", self.serve_master_playlist)
+        # self.app.router.add_get(r"/{gamePK}/{mediaId}/{playlist:.+\.m3u8}", self.serve_media_playlist)
+        # self.app.router.add_get("/{gamePK}/{mediaId}", self.serve_stream_landing2)
+
+        logger.info(f"Starting web server at http://{self.host}:{self.port}")
+        web.run_app(self.app, host=self.host, port=self.port)

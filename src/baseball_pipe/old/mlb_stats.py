@@ -1,7 +1,7 @@
 import aiohttp
 import logging, requests
 from datetime import datetime, timedelta
-import baseball_pipe.utilities as u
+import baseball_pipe.old.utilities as u
 
 
 logger = logging.getLogger(__name__)

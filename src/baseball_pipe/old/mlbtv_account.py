@@ -2,8 +2,8 @@ import asyncio
 import base64
 import hashlib
 
-import baseball_pipe.utilities as u
-from baseball_pipe.mlbtv_token import Token
+import baseball_pipe.old.utilities as u
+from baseball_pipe.old.mlbtv_token import Token
 import curl_cffi
 import logging
 import os

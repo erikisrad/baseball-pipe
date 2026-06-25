@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from baseball_pipe.utilities import get_current_datetime
+from baseball_pipe.old.utilities import get_current_datetime
 import pytz
 import logging
 
