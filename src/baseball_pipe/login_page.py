@@ -63,12 +63,5 @@ async def login(request):
         logger.info(f"User logged in successfully from {client_ip}")
         return response
 
-    # Wrong password
     logger.warning(f"Login failed for {client_ip}")
-    return web.Response(
-        text="""
-            <p style='color:red;text-align:center;'>Incorrect password</p>
-            <a href="/login">Try again</a>
-        """,
-        content_type="text/html"
-    )
+    raise web.HTTPFound("/login?error=1")

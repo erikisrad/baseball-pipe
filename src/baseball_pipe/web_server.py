@@ -3,14 +3,10 @@ from aiohttp import web
 import logging as logger
 
 import aiohttp
-import baseball_pipe.misc.utilities as u
-import baseball_pipe.login
+import baseball_pipe.login_page
+import baseball_pipe.date_page
 import baseball_pipe.router
-from baseball_pipe.old.mlbtv_stream import Stream
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-INDEX_FILE = os.path.join(SCRIPT_DIR, "index.html")
-LOCAL_PLAYLIST = os.path.join(os.path.dirname(__file__), "local.m3u8")
 AT = " @ "
 SPC = "&nbsp;"
 
@@ -29,7 +25,7 @@ async def auth_middleware(request, handler):
         logger.info(f"sending redirect to login for {request.remote}")
         raise web.HTTPFound("/login")
 
-    if not baseball_pipe.login.verify_signed_cookie(raw):
+    if not baseball_pipe.login_page.verify_signed_cookie(raw):
         logger.warning(f"sending bad cookie redirect to login for {request.remote}")
         raise web.HTTPFound("/login")
 
@@ -49,6 +45,7 @@ class WebServer:
 
     async def on_startup(self, app):
         self.master_session = aiohttp.ClientSession()
+        app["master_session"] = self.master_session
 
     async def on_cleanup(self, app):
         if self.master_session:
@@ -63,10 +60,10 @@ class WebServer:
         self.app.router.add_get("/today", baseball_pipe.router.serve_today)
         self.app.router.add_get("/yesterday", baseball_pipe.router.serve_yesterday)
         self.app.router.add_get("/tomorrow", baseball_pipe.router.serve_tomorrow)
-        self.app.router.add_route("*", "/login", baseball_pipe.login.login)
+        self.app.router.add_route("*", "/login", baseball_pipe.login_page.login)
 
         # Regex-constrained path params (aiohttp supports this natively)
-        # self.app.router.add_get(r"/{date:\d{8}}", self.serve_date3)
+        self.app.router.add_get(r"/{date:\d{8}}", baseball_pipe.date_page.serve_date)
         # self.app.router.add_get(r"/{gamePK:\d{1,6}}", self.serve_gamePK2)
         # self.app.router.add_get("/{gamePK}/{mediaId}/master.m3u8", self.serve_master_playlist)
         # self.app.router.add_get(r"/{gamePK}/{mediaId}/{playlist:.+\.m3u8}", self.serve_media_playlist)

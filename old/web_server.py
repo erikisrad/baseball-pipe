@@ -560,7 +560,6 @@ class WebServer:
             }
         )
 
-    
     async def serve_media_file(self, base_url, gamePK, mediaId, suffix):
         logger.info(f"processing {suffix} file for gamePK {gamePK}, mediaId: {mediaId}")
 

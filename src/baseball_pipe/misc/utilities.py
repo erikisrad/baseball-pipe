@@ -1,8 +1,8 @@
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 
 def get_date(days_ago=None, start_date=None):
-    
     if type(start_date) == str:
         for fmt in ["%Y%m%d", "%Y-%m-%d", "%m-%d-%Y", "%Y-%m-%dT%H:%M:%SZ"]:
             try:
@@ -22,9 +22,22 @@ def get_date(days_ago=None, start_date=None):
 
     return date
 
+def get_local_tz_offset(tz: str = None):
+    zone = ZoneInfo(tz) if tz else None
+    now_local = datetime.now(zone).astimezone(zone) if zone else datetime.now().astimezone()
+    offset = now_local.utcoffset()
+    hours = offset.total_seconds() / 3600
+    return f"UTC+{hours:g}" if hours >= 0 else f"UTC{hours:g}"
+
 def pretty_print_date(date):
     pretty_time = date.strftime("%A, %B %d %Y")
     return pretty_time
 
 def machine_print_date(date):
     return date.strftime("%Y%m%d")
+
+def pretty_print_time_locally(utc_str, tz):
+    dt_utc = datetime.fromisoformat(utc_str.replace("Z", "+00:00"))
+    dt_local = dt_utc.astimezone(ZoneInfo(tz))
+    pretty_time = dt_local.strftime("%I:%M %p").lstrip("0")
+    return pretty_time
