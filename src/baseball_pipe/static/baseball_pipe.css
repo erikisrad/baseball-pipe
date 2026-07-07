@@ -126,7 +126,7 @@ audio {
     /* Sets larger font size, observed in the prominent size of the date display text. */
     font-size: 18px;
     /* Makes text bold, observed in the emphasized appearance of the current date. */
-    font-weight: bold;
+    /* font-weight: bold; */
     /* Sets minimum width, observed in the date display maintaining width for alignment. */
     min-width: 150px;
     /* Centers text, observed in the date text being centered in the navigation. */
@@ -141,6 +141,17 @@ audio {
     border: none;
     border-top: 1px solid #ccc;
     margin: 10px 0 20px 0;
+}
+
+.info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 20px;
+}
+
+.info-right {
+    text-align: right;
 }
 
 .variant-columns {
@@ -361,6 +372,14 @@ td {
         min-width: 80px;
         /* Allows shrinking, observed in date display compressing on phones. */
         flex-shrink: 1;
+    }
+    /* Stacks series description above venue/local time, observed in single-column layout on phones. */
+    .info-row {
+        flex-direction: column;
+        gap: 0;
+    }
+    .info-right {
+        text-align: left;
     }
     /* Adjusts header paragraphs, observed in smaller header text on phones. */
     .header p {

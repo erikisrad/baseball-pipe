@@ -1,0 +1,24 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Baseball Pipe</title>
+        <link rel="stylesheet" href="/static/baseball_pipe.css">
+    <body>
+        <div class="container">
+            <p class="date-display">$p_date</p>
+            <p class="date-display">$away_name @ $home_name</p>
+            <hr class="date-line">
+            <div class="info-row">
+                <p>$series_description$series_string</p>
+                <div class="info-right">
+                    <p>$time_str</p>
+                </div>
+            </div>
+            </br>
+            $broadcast_html
+            <p><a href="$back_url"><-- back</a></p>
+        </div>
+    </body>
+</html>

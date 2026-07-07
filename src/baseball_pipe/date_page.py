@@ -16,7 +16,7 @@ async def serve_date(request):
     logger.info(f"serving date page for {date_str}")
 
     date = u.get_date(start_date=date_str)
-    games = await baseball_pipe.mlb_stats.get_games_on_date(start_date=date, session=session)
+    games = await baseball_pipe.mlb_stats.get_games_on_date(start_date=date, session=session, broadcasts=True)
         
     yesterday = (date - u.timedelta(days=1)).strftime("%Y%m%d")
     tomorrow = (date + u.timedelta(days=1)).strftime("%Y%m%d")
@@ -37,6 +37,7 @@ async def serve_date(request):
 def generate_games_table(games, tz):
     table = ""
     records = reverse_final_scores(games)
+    offset = u.get_local_tz_offset(tz)
 
     if games:
         table += f"""<table>
@@ -44,7 +45,7 @@ def generate_games_table(games, tz):
                 <tr>
                     <th>Game</th>
                     <th>Free</th>
-                    <th>{u.get_local_tz_offset(tz)}</th>
+                    <th>{offset}</th>
                     <th>State</th>
                 </tr>
             </thead>
@@ -53,36 +54,47 @@ def generate_games_table(games, tz):
         table += f"<p class='no-games'>No Games Scheduled.<p>"
 
     for game in games:
-        hn = game["teams"]["home"]["team"]["name"]
-        hw = records.get(hn, {}).get("wins", game["teams"]["home"]["leagueRecord"]["wins"])
-        hl = records.get(hn, {}).get("losses", game["teams"]["home"]["leagueRecord"]["losses"])
-        an = game["teams"]["away"]["team"]["name"]
-        aw = records.get(an, {}).get("wins", game["teams"]["away"]["leagueRecord"]["wins"])
-        al = records.get(an, {}).get("losses", game["teams"]["away"]["leagueRecord"]["losses"])
 
-        gamePK = game["gamePk"]
-        game_date = game.get("gameDate", "Unknown")
-        status = game.get("status", {}).get("detailedState", "Unknown")
+        hn = u.safe_get(game, "teams", "home", "team", "name", default="Unknown")
+        hw = u.safe_get(records, hn, "wins", default=u.safe_get(game, "teams", "home", "leagueRecord", "wins", default="?"))
+        hl = u.safe_get(records, hn, "losses", default=u.safe_get(game, "teams", "home", "leagueRecord", "losses", default="?"))
+
+        an = u.safe_get(game, "teams", "away", "team", "name", default="Unknown")
+        aw = u.safe_get(records, an, "wins", default=u.safe_get(game, "teams", "away", "leagueRecord", "wins", default="?"))
+        al = u.safe_get(records, an, "losses", default=u.safe_get(game, "teams", "away", "leagueRecord", "losses", default="?"))
+
+        gamePK = u.safe_get(game, "gamePk", default="Unknown")
+        game_datetime = u.safe_get(game, "gameDate", default=None)
+
+        status = u.safe_get(game, "status", "detailedState", default="Unknown")
+
+        if "in progress" in status.lower():
+            try:
+                inning = u.safe_get(game, "linescore", "currentInningOrdinal", default="?")
+                half = u.safe_get(game, "linescore", "inningHalf", default="?")[:3]
+                status = f"{inning}, {half}"
+            except Exception as e:
+                logger.warning(f"failed to get linescore info for game {gamePK}: {e}")
+
         free = False
 
-        for broadcast in game.get("broadcasts", []):
-            if broadcast.get("freeGame", False):
+        for broadcast in u.safe_get(game, "broadcasts", default=[]):
+            if u.safe_get(broadcast, "freeGame", default=False):
                 free = True
                 break
 
         left = f"({aw}-{al}) {an}"
         right = f"{hn} ({hw}-{hl})"
 
-        time_str = u.pretty_print_time_locally(game_date, tz)
-        row_class = 'class="free-game"' if free else ''
+        time_str = u.pretty_print_time_in_tz(game_datetime, tz)
         free_marker = "★" if free else ""
         link = f'<a href="/{gamePK}"><span class="left">{left}</span><span class="at"> @ </span><span class="right">{right}</span></a>'
 
         table += f"""
-                <tr {row_class}>
+                <tr>
                     <td data-label="Game">{link}</td>
                     <td data-label="Free">{free_marker}</td>
-                    <td data-label="{u.get_local_tz_offset()}">{time_str}</td>
+                    <td data-label="{offset}">{time_str}</td>
                     <td data-label="State">{status}</td>
                 </tr>"""
         
@@ -92,9 +104,8 @@ def generate_games_table(games, tz):
 
     return table
 
-
 # attempts to not spoil games by reverting season records for finished games
-# i could just query the previous day's standings but im a masochist
+# i could just query the previous day's standings but this is more efficient... probably
 def reverse_final_scores(games):
     records = {}
 

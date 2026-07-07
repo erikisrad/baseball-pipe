@@ -13,11 +13,11 @@ HEADERS = {
 
 async def get_games_on_date(session:aiohttp.ClientSession, start_date, broadcasts:bool=False):
 
-    logger.info(f"fetching games on {start_date}")
     if isinstance(start_date, datetime):
         start_date = start_date.strftime("%Y-%m-%d")
     elif start_date.isdigit() and len(start_date) == 8:
         start_date = f"{start_date[:4]}-{start_date[4:6]}-{start_date[6:8]}"
+    logger.info(f"fetching games on {start_date}")
 
     assert isinstance(start_date, str), "start_date must be a string or datetime"
 
@@ -27,10 +27,17 @@ async def get_games_on_date(session:aiohttp.ClientSession, start_date, broadcast
         f"endDate={start_date}"
     ]
 
-    if broadcasts:
-        schedule_url_options.append("hydrate=broadcasts(all)")
+    hydrations = [
+        "linescore"
+    ]
 
-    schedule_url = SCHEDULE_URL_PREFIX + "&".join(schedule_url_options)
+    if broadcasts:
+        hydrations.append("broadcasts(all)")
+
+    if schedule_url_options:
+        schedule_url = SCHEDULE_URL_PREFIX + "&".join(schedule_url_options)
+    if hydrations:
+        schedule_url += "&hydrate=" + ",".join(hydrations)
 
     logger.info(f"sending request to {schedule_url}")
     async with session.get(schedule_url, headers=HEADERS, ssl=False) as res:
@@ -48,3 +55,34 @@ async def get_games_on_date(session:aiohttp.ClientSession, start_date, broadcast
             return games
 
     return []
+
+async def get_game_content(gamePK, session:aiohttp.ClientSession):
+
+    content_url = SCHEDULE_URL_PREFIX + f"gamePk={gamePK}"
+
+    hydrations = [
+        "team",
+        "broadcasts(all)",
+        "game(content(media(all)editorial(all)))",
+        "venue(timezone)"
+    ]
+
+    if hydrations:
+        content_url += "&hydrate=" + ",".join(hydrations)
+
+    logger.info(f"sending request to {content_url}")
+
+    async with session.get(content_url, headers=HEADERS, ssl=False) as res:
+        logger.debug("awaiting response...")
+        if res.status != 200:
+            raise Exception(f"failed to fetch content game {gamePK}: {res.status} {res.reason}")
+        res_json = await res.json()
+        logger.debug(f"response received, status {res.status}")
+
+    try:
+        game = res_json["dates"][0]["games"][0]
+    except (KeyError, IndexError) as e:
+        logger.error(f"failed to parse game content for {gamePK}: {e}")
+        game = {}
+
+    return game

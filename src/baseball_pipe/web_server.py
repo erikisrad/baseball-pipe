@@ -5,6 +5,7 @@ import logging as logger
 import aiohttp
 import baseball_pipe.login_page
 import baseball_pipe.date_page
+import baseball_pipe.game_page
 import baseball_pipe.router
 
 AT = " @ "
@@ -52,6 +53,7 @@ class WebServer:
             await self.master_session.close()
 
     def start(self):
+        logger.getLogger("aiohttp.access").setLevel(logger.WARNING)
 
         self.app.on_startup.append(self.on_startup)
         self.app.on_cleanup.append(self.on_cleanup)
@@ -64,7 +66,7 @@ class WebServer:
 
         # Regex-constrained path params (aiohttp supports this natively)
         self.app.router.add_get(r"/{date:\d{8}}", baseball_pipe.date_page.serve_date)
-        # self.app.router.add_get(r"/{gamePK:\d{1,6}}", self.serve_gamePK2)
+        self.app.router.add_get(r"/{gamePK:\d{1,6}}", baseball_pipe.game_page.serve_game)
         # self.app.router.add_get("/{gamePK}/{mediaId}/master.m3u8", self.serve_master_playlist)
         # self.app.router.add_get(r"/{gamePK}/{mediaId}/{playlist:.+\.m3u8}", self.serve_media_playlist)
         # self.app.router.add_get("/{gamePK}/{mediaId}", self.serve_stream_landing2)
