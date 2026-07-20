@@ -8,7 +8,8 @@ logger = logging.getLogger(__name__)
 
 SECRET = os.environ["secret"]
 PASSWORD = os.environ["auth"]
-LOGIN_HTML = os.path.join(os.path.dirname(__file__), "html", "login.html")
+PACKAGE_ROOT = os.path.dirname(os.path.dirname(__file__))
+LOGIN_HTML = os.path.join(PACKAGE_ROOT, "html", "login.html")
 
 def make_signed_cookie(value: str) -> str:
     sig = hmac.new(SECRET.encode(), value.encode(), hashlib.sha256).hexdigest()

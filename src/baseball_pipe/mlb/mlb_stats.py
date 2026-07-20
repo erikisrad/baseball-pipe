@@ -2,13 +2,13 @@ from datetime import datetime
 import logging
 import aiohttp
 import baseball_pipe.misc.utilities as u
+import baseball_pipe.misc.emulator as e
 
 logger = logging.getLogger(__name__)
 
 SCHEDULE_URL_PREFIX = "https://statsapi.mlb.com/api/v1/schedule?"
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
-    "Connection": "close"
+    "User-Agent": e.USER_AGENT,
 }
 
 async def get_games_on_date(session:aiohttp.ClientSession, start_date, broadcasts:bool=False):
@@ -80,9 +80,21 @@ async def get_game_content(gamePK, session:aiohttp.ClientSession):
         logger.debug(f"response received, status {res.status}")
 
     try:
-        game = res_json["dates"][0]["games"][0]
+        game = res_json["dates"][-1]["games"][-1]
     except (KeyError, IndexError) as e:
         logger.error(f"failed to parse game content for {gamePK}: {e}")
         game = {}
 
     return game
+
+def get_game_datetime(game):
+
+    if "rescheduleDate" in game:
+        official_date = u.safe_get(game, "rescheduleDate", default=None)
+    else:
+        official_date = u.safe_get(game, "gameDate", default=None)
+
+    if official_date:
+        return u.get_date(start_date=official_date)
+    
+    return None

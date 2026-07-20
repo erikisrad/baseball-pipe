@@ -3,20 +3,25 @@ from string import Template
 import logging
 import os
 import baseball_pipe.misc.utilities as u
-import baseball_pipe.mlb_stats
+import baseball_pipe.mlb.mlb_stats
 
 logger = logging.getLogger(__name__)
-DATE_HTML = os.path.join(os.path.dirname(__file__), "html", "date.html")
+PACKAGE_ROOT = os.path.dirname(os.path.dirname(__file__))
+DATE_HTML = os.path.join(PACKAGE_ROOT, "html", "date.html")
 
 async def serve_date(request):
     date_str = request.match_info.get("date")
     tz = request.cookies.get("tz", "UTC")
     session = request.app["master_session"]
 
-    logger.info(f"serving date page for {date_str}")
+    logger.info(f"serving {date_str} date page to {u.get_ip_from_request(request)}")
 
-    date = u.get_date(start_date=date_str)
-    games = await baseball_pipe.mlb_stats.get_games_on_date(start_date=date, session=session, broadcasts=True)
+    try:
+        date = u.get_date(start_date=date_str)
+    except ValueError:
+        return serve_no_date(date_str)
+    
+    games = await baseball_pipe.mlb.mlb_stats.get_games_on_date(start_date=date, session=session, broadcasts=True)
         
     yesterday = (date - u.timedelta(days=1)).strftime("%Y%m%d")
     tomorrow = (date + u.timedelta(days=1)).strftime("%Y%m%d")
@@ -37,7 +42,7 @@ async def serve_date(request):
 def generate_games_table(games, tz):
     table = ""
     records = reverse_final_scores(games)
-    offset = u.get_local_tz_offset(tz)
+    offset = u.get_tz_as_offset(tz)
 
     if games:
         table += f"""<table>
@@ -64,7 +69,7 @@ def generate_games_table(games, tz):
         al = u.safe_get(records, an, "losses", default=u.safe_get(game, "teams", "away", "leagueRecord", "losses", default="?"))
 
         gamePK = u.safe_get(game, "gamePk", default="Unknown")
-        game_datetime = u.safe_get(game, "gameDate", default=None)
+        game_datetime = baseball_pipe.mlb.mlb_stats.get_game_datetime(game)
 
         status = u.safe_get(game, "status", "detailedState", default="Unknown")
 
@@ -78,7 +83,7 @@ def generate_games_table(games, tz):
 
         free = False
 
-        for broadcast in u.safe_get(game, "broadcasts", default=[]):
+        for broadcast in game.get("broadcasts", []):
             if u.safe_get(broadcast, "freeGame", default=False):
                 free = True
                 break
@@ -132,4 +137,7 @@ def reverse_final_scores(games):
 
     return records
 
+def serve_no_date(date_str):
+    logger.warning(f"invalid date format: {date_str}")
+    return web.Response(text=f"This isn't a valid YYYYMMDD date: {date_str}\nTry again", status=400)
     

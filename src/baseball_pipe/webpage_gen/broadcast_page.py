@@ -1,42 +1,84 @@
-async def serve_stream_landing2(self, base_url, gamePK, mediaId):
-    logger.info(f"processing stream landing for gamepk {gamePK}, mediaID {mediaId}")
-    html_file = Path(os.path.join(SCRIPT_DIR, "stream_landing.html"))
+import logging
+import os
+from string import Template
+from aiohttp import web
 
-    game = await baseball_pipe.old.mlb_stats.get_game_content(gamePK)
+from baseball_pipe.webpage_gen.game_page import serve_no_game
+import baseball_pipe.mlb.mlb_stats
+import baseball_pipe.misc.utilities as u
+
+logger = logging.getLogger(__name__)
+PACKAGE_ROOT = os.path.dirname(os.path.dirname(__file__))
+BROADCAST_HTML = os.path.join(PACKAGE_ROOT, "html", "broadcast.html")
+
+async def serve_broadcast(request):
+    gamePK = request.match_info.get("gamePK")
+    mediaId = request.match_info.get("mediaId")
+    local_tz = request.cookies.get("tz", "UTC")
+    session = request.app["master_session"]
+    mlbtv_account = request.app["mlbtv_account"]
+
+    logger.info(f"serving {gamePK}/{mediaId} broadcast page to {u.get_ip_from_request(request)}")
+    game = await baseball_pipe.mlb.mlb_stats.get_game_content(gamePK, session)
+    
+    if not game:
+        return serve_no_game(gamePK)
+    
     broadcasts = game.get("broadcasts", [])
-
     selected_broadcast = None
     for broadcast in broadcasts:
         if broadcast.get("mediaId", None) == mediaId:
             selected_broadcast = broadcast
             break
 
-    home_name = game["teams"]["home"]["team"]["name"]
-    away_name = game["teams"]["away"]["team"]["name"]
-    date = u.get_date(start_date=game["officialDate"])
-    venue = game["venue"]["name"]
-    series_length = game.get('gamesInSeries', None)
-    series_game_number = game.get('seriesGameNumber', None)
+    if not selected_broadcast:
+        return serve_no_broadcast(gamePK, mediaId)
 
+    #TEAM NAMES
+    home_name = u.safe_get(game, "teams", "home", "team", "name", default="Unknown")
+    away_name = u.safe_get(game, "teams", "away", "team", "name", default="Unknown")
+
+    date = baseball_pipe.mlb.mlb_stats.get_game_datetime(game)
+
+    #SERIES LENGTH
+    series_length = u.safe_get(game, "gamesInSeries", default=None)
+    series_game_number = u.safe_get(game, "seriesGameNumber", default=None)
     if series_length and series_game_number:
         series_string = f", Game {series_game_number} of {series_length}"
     else:
         series_string = ""
-    series_description = game['seriesDescription'] if "series" in game['seriesDescription'].lower() or not series_string else f"{game['seriesDescription']} Series"
-    game_description = game['ifNecessaryDescription']
-    day_night = game['dayNight'].capitalize()
 
-    video_url = f"{base_url}{gamePK}/{mediaId}/master.m3u8"
+    #SERIES TITLE
+    series_description = u.safe_get(game, "seriesDescription", default="Unknown series")
+    if series_string and not "series" in series_description.lower():
+        series_description = f"{series_description} Series"
+
+    #TIME
+    venue = u.safe_get(game, "venue", "name", default="Unknown Venue")
+    venue_tz = u.safe_get(game, "venue", "timeZone", "id", default=None)
+    if date:
+        local_time_str = u.pretty_print_time_in_tz(date, local_tz)
+        local_offset = u.get_tz_as_offset(local_tz)
+        if venue_tz:
+            venue_time_str = u.pretty_print_time_in_tz(date, venue_tz)
+            if venue_time_str == local_time_str:
+                time_str = f"{venue_time_str} at {venue} ({local_offset})"
+            else:
+                time_str = f"{venue_time_str} at {venue} ({local_time_str} {local_offset})"
+        else:
+            logger.warning(f"missing venue timezone for game {gamePK}")
+            time_str = f"{local_time_str} {local_offset}"
+    else:
+        time_str = ""
+
+    with open(BROADCAST_HTML) as f:
+        template = Template(f.read())
+
+    video_url = f"/{gamePK}/{mediaId}/master.m3u8"
     #video_url = "https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_16x9/bipbop_16x9_variant.m3u8" # master debug
     #video_url = "https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_16x9/gear5/prog_index.m3u8" # best
     #video_url = "https://dai.google.com/linear/hls/pa/event/k-VHR5unRdusBDqoXAuB0Q/stream/d337505d-c921-4b35-bdd2-8b22646e8522:MRN2/master.m3u8" # debug
 
-    if not self.account:
-        self.account = baseball_pipe.old.mlbtv_account.Account(self.chrome120_session, self.proxy_url)
-
-    if not self.token:
-        self.token = await self.account.get_token()
-    
     if f"{gamePK}/{mediaId}" not in self.streams:
         self.streams[f"{gamePK}/{mediaId}"] = baseball_pipe.old.mlbtv_stream.Stream(self.token, gamePK, mediaId, self.master_session, self.proxy_url)
 
@@ -142,3 +184,7 @@ async def serve_stream_landing2(self, base_url, gamePK, mediaId):
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Headers": "*"
     })
+
+def serve_no_broadcast(gamePK, mediaId):
+    logger.warning(f"no broadcast found for: {gamePK}/{mediaId}")
+    return web.Response(text=f"This isn't a valid mediaId ({mediaId}) for this gamePK ({gamePK})\nTry again", status=400)

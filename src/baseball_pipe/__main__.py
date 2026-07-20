@@ -1,4 +1,4 @@
-import baseball_pipe.web_server
+import baseball_pipe.server.web_server
 import os, sys, logging
 
 APP = "baseball_pipe"
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 logger.info(f"{APP} started")
 
 def main():
-    ws = baseball_pipe.web_server.WebServer()
+    ws = baseball_pipe.server.web_server.WebServer()
     ws.start()
 
 if __name__ == '__main__':
