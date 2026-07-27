@@ -56,7 +56,7 @@ class WebServer:
         app["mlbtv_account"] = self.mlbtv_account
         app["proxy_url"] = self.proxy_url
 
-        logger.info(await self.mlbtv_account.test())
+        await self.mlbtv_account.test()
 
     async def on_cleanup(self, app):
         if self.master_session:

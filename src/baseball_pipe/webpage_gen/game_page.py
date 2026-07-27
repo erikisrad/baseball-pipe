@@ -15,7 +15,7 @@ async def serve_game(request):
     local_tz = request.cookies.get("tz", "UTC")
     session = request.app["master_session"]
 
-    logger.info(f"serving {gamePK} game page to {u.get_ip_from_request(request)}")
+    logger.info(f"fetching {gamePK} game page for {u.get_ip_from_request(request)}")
     game = await baseball_pipe.mlb.mlb_stats.get_game_content(gamePK, session)
     
     if not game:
@@ -94,6 +94,8 @@ async def serve_game(request):
                                 back_url=f"/{back_str}"
                                 )
     
+    logger.info(f"returning {gamePK} game page to {u.get_ip_from_request(request)}")
+
     return web.Response(text=html, content_type="text/html", headers={
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Headers": "*"

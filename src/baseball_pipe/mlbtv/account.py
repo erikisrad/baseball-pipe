@@ -4,6 +4,7 @@ import hashlib
 import aiohttp
 import baseball_pipe.misc.utilities as u
 from baseball_pipe.mlbtv.token import Token
+import baseball_pipe.misc.header_emulator as e
 import baseball_pipe.mlbtv.stream
 import logging
 import os
@@ -45,8 +46,7 @@ class Account():
         self._interaction_code = None
         self._token = None
 
-    async def test(self):
-        await asyncio.sleep(33)
+    async def test(self): # test account's ability to create a stream
         stream = await self.get_stream("823440", "a85458be-cd51-49c5-94b9-80bc7c0a71e4")
         master = await stream.get_master_playlist("http://localhost:8080/")
         expired = stream.is_expired()
@@ -61,8 +61,9 @@ class Account():
             self.reset()
             await self._gen_token()
 
-        if id not in self._streams:
+        if id not in self._streams.keys() or self._streams[id].is_expired():
             self._streams[id] = baseball_pipe.mlbtv.stream.Stream(self._token, game_pk, media_id, self.session, self.proxy)
+            await self._streams[id].get_master_playlist_url()
 
         return self._streams[id]
 
@@ -101,20 +102,10 @@ class Account():
         ]
         payload = '&'.join(payload)
 
-        headers = { "Accept": "application/json",
-            "Accept-Encoding": "gzip, deflate, br, zstd",
-            "Accept-Language": "en",
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Origin": "https://www.mlb.com",
-            "Priority": "u=1, i",
-            "Referer": "https://www.mlb.com/login?redirectUri=/",
-            "Sec-Ch-Ua": '"Chromium";v="142", "Google Chrome";v="142", "Not_A Brand";v="99"',
-            "Sec-Ch-Ua-Mobile": "?0",
-            "sec-Ch-Ua-Platform": '"Windows"',
-            "Sec-Fetch-Dest": "empty",
-            "Sec-Fetch-Mode": "cors",
-            "Sec-Fetch-Site": "same-site",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
+        headers = { 
+            **e.ACCOUNT_HEADER,
+            "Accept": "application/json",
+            "Content-Type": "application/x-www-form-urlencoded"
         }
 
         logger.info(f"sending request to {interact_url}")
@@ -122,7 +113,6 @@ class Account():
             if res.status != 200:
                 raise Exception(f"Failed to post interact: {res.status} {res.reason}")
             res_json = await res.json()
-            logger.info(f"response received, status {res.status}")
 
         self._interaction_handle = res_json["interaction_handle"]
         logger.info(f"obtained interaction_handle: {self._interaction_handle[0:3]}...{self._interaction_handle[-3:]}")
@@ -137,20 +127,9 @@ class Account():
         payload = '{"interactionHandle":"%s"}' % self._interaction_handle
 
         headers = {
-                "Accept": "application/ion+json; okta-version=1.0.0",
-                "Accept-Encoding": "gzip, deflate, br, zstd",
-                "Accept-Language": "en",
-                "Content-Type": "application/ion+json; okta-version=1.0.0",
-                "Origin": "https://www.mlb.com",
-                "Priority": "u=1, i",
-                "Referer": "https://www.mlb.com/login?redirectUri=/",
-                "Sec-Ch-Ua": '"Not)A;Brand";v="8", "Chromium";v="138", "Google Chrome";v="138"',
-                "Sec-Ch-Ua-Mobile": "?0",
-                "sec-Ch-Ua-Platform": '"Windows"',
-                "Sec-Fetch-Dest": "empty",
-                "Sec-Fetch-Mode": "cors",
-                "Sec-Fetch-Site": "same-site",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
+            **e.ACCOUNT_HEADER,
+            "Accept": "application/ion+json; okta-version=1.0.0",
+            "Content-Type": "application/ion+json; okta-version=1.0.0",
         }
 
         logger.info(f"sending request to {INTROSPECT_URL}")
@@ -158,7 +137,6 @@ class Account():
             if res.status != 200:
                 raise Exception(f"Failed to post introspect: {res.status} {res.reason}")
             res_json = await res.json()
-            logger.info(f"response received, status {res.status}")
 
         self._introspect_state_handle =  res_json["stateHandle"]
         logger.info(f"obtained introspect stateHandle: {self._introspect_state_handle[0:3]}...{self._introspect_state_handle[-3:]}")
@@ -173,20 +151,9 @@ class Account():
         payload = '{"identifier":"%s","stateHandle":"%s"}' % (self.u, self._introspect_state_handle)
 
         headers = {
+            **e.ACCOUNT_HEADER,
             "Accept": "application/json; okta-version=1.0.0",
-            "Accept-Encoding": "gzip, deflate, br, zstd",
-            "Accept-Language": "en",
-            "Content-Type": "application/json",
-            "Origin": "https://www.mlb.com",
-            "Priority": "u=1, i",
-            "Referer": "https://www.mlb.com/login?redirectUri=/",
-            "Sec-Ch-Ua": '"Not)A;Brand";v="8", "Chromium";v="138", "Google Chrome";v="138"',
-            "Sec-Ch-Ua-Mobile": "?0",
-            "sec-Ch-Ua-Platform": '"Windows"',
-            "Sec-Fetch-Dest": "empty",
-            "Sec-Fetch-Mode": "cors",
-            "Sec-Fetch-Site": "same-site",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
+            "Content-Type": "application/json"
         }
 
         logger.info(f"sending request to {IDENTITY_URL}")
@@ -194,7 +161,6 @@ class Account():
             if res.status != 200:
                 raise Exception(f"Failed to post identity: {res.status} {res.reason}")
             res_json = await res.json()
-            logger.info(f"response received, status {res.status}")
 
             self._identity_state_handle = res_json["stateHandle"]
             authenticators = res_json["authenticators"]["value"]
@@ -222,20 +188,9 @@ class Account():
         payload = '{"authenticator":{"id":"%s"},"stateHandle":"%s"}' % (self._id_password, self._identity_state_handle)
 
         headers = {
-                "Accept": "application/json; okta-version=1.0.0",
-                "Accept-Encoding": "gzip, deflate, br, zstd",
-                "Accept-Language": "en",
-                "Content-Type": "application/json",
-                "Origin": "https://www.mlb.com",
-                "Priority": "u=1, i",
-                "Referer": "https://www.mlb.com/login?redirectUri=/",
-                "Sec-Ch-Ua": '"Not)A;Brand";v="8", "Chromium";v="138", "Google Chrome";v="138"',
-                "Sec-Ch-Ua-Mobile": "?0",
-                "sec-Ch-Ua-Platform": '"Windows"',
-                "Sec-Fetch-Dest": "empty",
-                "Sec-Fetch-Mode": "cors",
-                "Sec-Fetch-Site": "same-site",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
+            **e.ACCOUNT_HEADER,
+            "Accept": "application/json; okta-version=1.0.0",
+            "Content-Type": "application/json"
         }
 
         logger.info(f"sending request to {CHALLENGE_URL}")
@@ -243,7 +198,6 @@ class Account():
             if res.status != 200:
                 raise Exception(f"Failed to post challenge: {res.status} {res.reason}")
             res_json = await res.json()
-            logger.info(f"response received, status {res.status}")
 
         self._challenge_state_handle =  res_json["stateHandle"]
 
@@ -257,20 +211,9 @@ class Account():
         payload = '{"credentials":{"passcode":"%s"},"stateHandle":"%s"}' % (self.p, self._challenge_state_handle)
 
         headers = {
-                "Accept": "application/json; okta-version=1.0.0",
-                "Accept-Encoding": "gzip, deflate, br, zstd",
-                "Accept-Language": "en",
-                "Content-Type": "application/json",
-                "Origin": "https://www.mlb.com",
-                "Priority": "u=1, i",
-                "Referer": "https://www.mlb.com/login?redirectUri=/",
-                "Sec-Ch-Ua": '"Not)A;Brand";v="8", "Chromium";v="138", "Google Chrome";v="138"',
-                "Sec-Ch-Ua-Mobile": "?0",
-                "sec-Ch-Ua-Platform": '"Windows"',
-                "Sec-Fetch-Dest": "empty",
-                "Sec-Fetch-Mode": "cors",
-                "Sec-Fetch-Site": "same-site",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
+            **e.ACCOUNT_HEADER,
+            "Accept": "application/json; okta-version=1.0.0",
+            "Content-Type": "application/json"
         }
 
         logger.info(f"sending request to {ANSWER_URL}")
@@ -309,20 +252,9 @@ class Account():
         payload = '&'.join(payload)
 
         headers = {
+            **e.ACCOUNT_HEADER,
             "Accept": "application/json",
-            "Accept-Encoding": "gzip, deflate, br, zstd",
-            "Accept-Language": "en",
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Origin": "https://www.mlb.com",
-            "Priority": "u=1, i",
-            "Referer": "https://www.mlb.com/login?redirectUri=/",
-            "Sec-Ch-Ua": '"Not)A;Brand";v="8", "Chromium";v="138", "Google Chrome";v="138"',
-            "Sec-Ch-Ua-Mobile": "?0",
-            "sec-Ch-Ua-Platform": '"Windows"',
-            "Sec-Fetch-Dest": "empty",
-            "Sec-Fetch-Mode": "cors",
-            "Sec-Fetch-Site": "same-site",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"
+            "Content-Type": "application/x-www-form-urlencoded"
         }
 
         logger.info(f"sending request to {TOKEN_URL}")
@@ -330,6 +262,5 @@ class Account():
             if res.status != 200:
                 raise Exception(f"Failed to gen token: {res.status} {res.reason}")
             res_json = await res.json()
-            logger.info(f"response received, status {res.status}")
 
         self._token = Token(res_json)

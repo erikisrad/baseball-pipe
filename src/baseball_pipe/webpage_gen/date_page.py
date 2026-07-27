@@ -14,7 +14,7 @@ async def serve_date(request):
     tz = request.cookies.get("tz", "UTC")
     session = request.app["master_session"]
 
-    logger.info(f"serving {date_str} date page to {u.get_ip_from_request(request)}")
+    logger.info(f"fetching {date_str} date page for {u.get_ip_from_request(request)}")
 
     try:
         date = u.get_date(start_date=date_str)
@@ -34,6 +34,8 @@ async def serve_date(request):
                                 yesterday_btn=yesterday_btn,
                                 tomorrow_btn=tomorrow_btn,
                                 table=generate_games_table(games, tz))
+
+    logger.info(f"returning {date_str} date page to {u.get_ip_from_request(request)}")
 
     return web.Response(text=html, content_type="text/html", headers={
             "Access-Control-Allow-Origin": "*"

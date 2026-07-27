@@ -2,14 +2,11 @@ from datetime import datetime
 import logging
 import aiohttp
 import baseball_pipe.misc.utilities as u
-import baseball_pipe.misc.emulator as e
+import baseball_pipe.misc.header_emulator as e
 
 logger = logging.getLogger(__name__)
 
 SCHEDULE_URL_PREFIX = "https://statsapi.mlb.com/api/v1/schedule?"
-HEADERS = {
-    "User-Agent": e.USER_AGENT,
-}
 
 async def get_games_on_date(session:aiohttp.ClientSession, start_date, broadcasts:bool=False):
 
@@ -40,12 +37,10 @@ async def get_games_on_date(session:aiohttp.ClientSession, start_date, broadcast
         schedule_url += "&hydrate=" + ",".join(hydrations)
 
     logger.info(f"sending request to {schedule_url}")
-    async with session.get(schedule_url, headers=HEADERS, ssl=False) as res:
-        logger.debug("awaiting response...")
+    async with session.get(schedule_url, headers=e.AGENT_HEADER, ssl=False) as res:
         if res.status != 200:
             raise Exception(f"Failed to fetch schedule for {start_date}: {res.status} {res.reason}")
         res_json = await res.json()
-        logger.debug(f"response received, status {res.status}")
 
     for date_obj in reversed(res_json.get("dates", [])):
         date_str = date_obj.get("date", "unknown")
@@ -72,17 +67,15 @@ async def get_game_content(gamePK, session:aiohttp.ClientSession):
 
     logger.info(f"sending request to {content_url}")
 
-    async with session.get(content_url, headers=HEADERS, ssl=False) as res:
-        logger.debug("awaiting response...")
+    async with session.get(content_url, headers=e.AGENT_HEADER, ssl=False) as res:
         if res.status != 200:
             raise Exception(f"failed to fetch content game {gamePK}: {res.status} {res.reason}")
         res_json = await res.json()
-        logger.debug(f"response received, status {res.status}")
 
     try:
         game = res_json["dates"][-1]["games"][-1]
-    except (KeyError, IndexError) as e:
-        logger.error(f"failed to parse game content for {gamePK}: {e}")
+    except (KeyError, IndexError) as err:
+        logger.error(f"failed to parse game content for {gamePK}: {err}")
         game = {}
 
     return game

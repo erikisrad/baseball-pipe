@@ -6,6 +6,8 @@ from aiohttp import web
 from baseball_pipe.webpage_gen.game_page import serve_no_game
 import baseball_pipe.mlb.mlb_stats
 import baseball_pipe.misc.utilities as u
+from baseball_pipe.mlbtv.account import Account
+from baseball_pipe.mlbtv.stream import Stream
 
 logger = logging.getLogger(__name__)
 PACKAGE_ROOT = os.path.dirname(os.path.dirname(__file__))
@@ -16,9 +18,10 @@ async def serve_broadcast(request):
     mediaId = request.match_info.get("mediaId")
     local_tz = request.cookies.get("tz", "UTC")
     session = request.app["master_session"]
-    mlbtv_account = request.app["mlbtv_account"]
+    mlbtv_account: Account = request.app["mlbtv_account"]
+    base_url = request.url.origin()
 
-    logger.info(f"serving {gamePK}/{mediaId} broadcast page to {u.get_ip_from_request(request)}")
+    logger.info(f"fetching {gamePK}/{mediaId} broadcast page for {u.get_ip_from_request(request)}")
     game = await baseball_pipe.mlb.mlb_stats.get_game_content(gamePK, session)
     
     if not game:
@@ -79,28 +82,23 @@ async def serve_broadcast(request):
     #video_url = "https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_16x9/gear5/prog_index.m3u8" # best
     #video_url = "https://dai.google.com/linear/hls/pa/event/k-VHR5unRdusBDqoXAuB0Q/stream/d337505d-c921-4b35-bdd2-8b22646e8522:MRN2/master.m3u8" # debug
 
-    if f"{gamePK}/{mediaId}" not in self.streams:
-        self.streams[f"{gamePK}/{mediaId}"] = baseball_pipe.old.mlbtv_stream.Stream(self.token, gamePK, mediaId, self.master_session, self.proxy_url)
-
+    err = None
     try:
-        master_playlist_url = await self.streams[f"{gamePK}/{mediaId}"].get_master_playlist_url()
-        assert "m3u8" in master_playlist_url
-        await self.streams[f"{gamePK}/{mediaId}"].get_master_playlist(base_url)
-        error = None
+        stream: Stream = mlbtv_account.get_stream(gamePK, mediaId)
+        stream.inititialize()
     except Exception as err:
-        error = err
-        logger.error(f"error getting master playlist url for {gamePK}/{mediaId}: {err}")
+        logger.error(f"failed to get master playlist url for {gamePK}/{mediaId}: {err}")
 
-    if error:
-        broadcast_html = f'<p><strong>Stream Error:</strong> {error}</p>'
+    if err:
+        broadcast_html = f'<p><strong>Stream Error:</strong> {err}</p>'
         downloads = ""
 
     else:
-        if selected_broadcast['type'] == "AM" or selected_broadcast['type'] == "FM":
+        cast_type = u.safe_get(selected_broadcast, 'type', default="Uknown")
+        if cast_type == "AM" or cast_type == "FM":
             broadcast_html = f'<audio src="{video_url}" controls autoplay></audio>'
         
         else:
-            #broadcast_html = f'<video src="{video_url}" controls autoplay></video>'
             broadcast_html = f'''<video id="hls-cast-player" class="video-js vjs-default-skin vjs-big-play-centered" controls preload="auto" crossorigin="anonymous">
             <source src="{video_url}" type="application/x-mpegURL" />
         </video>
@@ -114,7 +112,8 @@ async def serve_broadcast(request):
             <div class="vc">
                 <p class="dl">Ad-Free Playlists</p>
                 <a class="dl" href="{video_url}" download>Master Playlist</a>'''
-        
+
+        if stream.get_variant_playlists
         if self.streams[f"{gamePK}/{mediaId}"].variant_playlists:
 
             
@@ -179,6 +178,8 @@ async def serve_broadcast(request):
                                 downloads=downloads,
                                 back_url=f"{base_url}{gamePK}"
                                 )
+
+    logger.info(f"returning {gamePK}/{mediaId} broadcast page to {u.get_ip_from_request(request)}")
 
     return web.Response(text=html, content_type="text/html", headers={
         "Access-Control-Allow-Origin": "*",
