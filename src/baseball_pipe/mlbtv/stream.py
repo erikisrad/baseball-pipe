@@ -60,7 +60,7 @@ class Stream():
     # GETS
     async def get_master_playlist_url(self):
         if not self._master_playlist_url:
-            await self._gen_master_playlist_url
+            await self._gen_master_playlist_url()
         return self._gen_master_playlist_url
 
     async def get_master_playlist(self):
@@ -80,14 +80,24 @@ class Stream():
 
         return self._variant_playlists
 
+    async def get_upstream_base_url(self):
+        if not self._upstream_base_url:
+            await self._gen_master_playlist_url()
+
+        return self._upstream_base_url
+
     @staticmethod
     def _parse_expiration(expiration: str) -> datetime:
         expiration = re.sub(r'(\.\d{6})\d*Z$', r'\1+00:00', expiration)
         expiration = expiration.replace('Z', '+00:00') if expiration.endswith('Z') else expiration
         return datetime.fromisoformat(expiration)
 
-    def is_expired(self, expiration: datetime) -> bool:
+    def is_expired(self) -> bool:
+        if not self._expiration:
+            return False
+
         try:
+            expiration = self._parse_expiration(self._expiration)
             seconds_until_expired = round((expiration - datetime.now(timezone.utc)).total_seconds())
             logger.info(f"stream {self} expires in {seconds_until_expired} seconds")
             return seconds_until_expired <= 30

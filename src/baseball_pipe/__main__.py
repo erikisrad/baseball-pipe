@@ -18,7 +18,7 @@ logging.basicConfig(handlers=[stdout_handler, file_handler],
                     level=logging.DEBUG)
 
 logger = logging.getLogger(__name__)
-logger.info(f"{APP} started")
+logger.info(f"{APP} starting")
 
 def main():
     ws = baseball_pipe.server.web_server.WebServer()

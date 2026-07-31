@@ -8,23 +8,24 @@
         
         <link href="https://vjs.zencdn.net/7.20.3/video-js.css" rel="stylesheet" />
         <link rel="stylesheet" href="https://unpkg.com/@silvermine/videojs-chromecast@1.5.0/dist/silvermine-videojs-chromecast.css">
-
     </head>
     <body>
         <div class="container">
             <p class="date-display">$p_date</p>
+            <p class="date-display">$away_name @ $home_name</p>
+            <p class="date-display">Broadcast via $broadcast_name</p>
             <hr class="date-line">
-            <p>$away_name$AT$home_name</p>
-            <p>$day_night time at $venue</p>
-            <p>$series_description$series_string</p>
-            </br>
-            <p>Broadcast via $broadcast_name</p>
+            <div class="info-row">
+                <p>$series_description$series_string</p>
+                <div class="info-right">
+                    <p>$time_str</p>
+                </div>
+            </div>
             </br>
             $broadcast_html
             </br>
             $downloads
-            </br>
-            <a href="$back_url"><-- back</a>
+            <p><a href="$back_url"><-- back</a></p>
         </div>
     </body>
 </html>

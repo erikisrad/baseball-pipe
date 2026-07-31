@@ -47,8 +47,8 @@ class Account():
         self._token = None
 
     async def test(self): # test account's ability to create a stream
-        stream = await self.get_stream("823440", "a85458be-cd51-49c5-94b9-80bc7c0a71e4")
-        master = await stream.get_master_playlist("http://localhost:8080/")
+        stream:baseball_pipe.mlbtv.stream.Stream = await self.get_stream("823440", "a85458be-cd51-49c5-94b9-80bc7c0a71e4")
+        master = await stream.get_master_playlist()
         expired = stream.is_expired()
 
         logger.info(f"test stream master playlist: {master[:7]}...")
@@ -115,7 +115,6 @@ class Account():
             res_json = await res.json()
 
         self._interaction_handle = res_json["interaction_handle"]
-        logger.info(f"obtained interaction_handle: {self._interaction_handle[0:3]}...{self._interaction_handle[-3:]}")
 
     async def _post_introspect(self):
 
@@ -138,8 +137,7 @@ class Account():
                 raise Exception(f"Failed to post introspect: {res.status} {res.reason}")
             res_json = await res.json()
 
-        self._introspect_state_handle =  res_json["stateHandle"]
-        logger.info(f"obtained introspect stateHandle: {self._introspect_state_handle[0:3]}...{self._introspect_state_handle[-3:]}")
+        self._introspect_state_handle = res_json["stateHandle"]
 
     async def _post_identity(self):
 

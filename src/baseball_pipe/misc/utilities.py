@@ -79,3 +79,12 @@ def get_current_datetime():
 
 def gen_random_string(n):
     return "".join(random.choice(string.ascii_uppercase + string.digits) for _ in range(n))
+
+def presenter_remover(name):
+    if not name or not isinstance(name, str):
+        return name
+
+    presented_idx = name.lower().find(', presented by')
+    if presented_idx != -1:
+        name = name[:presented_idx].strip()
+    return name

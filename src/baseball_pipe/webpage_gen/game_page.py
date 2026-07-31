@@ -135,10 +135,8 @@ def construct_broadcasts(broadcasts, gamePK, short):
 
         media_id = u.safe_get(broadcast, 'mediaId', default=None)
         name = u.safe_get(broadcast, 'name', default=None)
-        if name:
-            presented_idx = name.lower().find('presented')
-            if presented_idx != -1:
-                name = name[:presented_idx].strip()
+        name = u.presenter_remover(name)
+
         type = u.safe_get(broadcast, 'type', default='N/A')
 
         side = u.safe_get(broadcast, 'homeAway', default="N/A")

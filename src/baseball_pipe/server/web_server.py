@@ -7,7 +7,7 @@ import baseball_pipe.webpage_gen.login_page
 import baseball_pipe.webpage_gen.date_page
 import baseball_pipe.webpage_gen.game_page
 import baseball_pipe.server.router
-import baseball_pipe.webpage_gen.broadcast_page
+import baseball_pipe.webpage_gen.broadcast_page2
 import baseball_pipe.mlbtv.account
 
 AT = " @ "
@@ -49,7 +49,7 @@ class WebServer:
     async def on_startup(self, app):
         self.master_session = aiohttp.ClientSession()
 
-        self.mlbtv_account = baseball_pipe.mlbtv.account.Account(self.master_session, self.proxy_url)
+        self.mlbtv_account = baseball_pipe.mlbtv.account.Account(self.master_session, proxy=None)
         await self.mlbtv_account._gen_token()
 
         app["master_session"] = self.master_session
@@ -77,7 +77,7 @@ class WebServer:
         # Regex-constrained path params (aiohttp supports this natively)
         self.app.router.add_get(r"/{date:\d{8}}", baseball_pipe.webpage_gen.date_page.serve_date)
         self.app.router.add_get(r"/{gamePK:\d{1,6}}", baseball_pipe.webpage_gen.game_page.serve_game)
-        self.app.router.add_get("/{gamePK}/{mediaId}", baseball_pipe.webpage_gen.broadcast_page.serve_broadcast)
+        self.app.router.add_get("/{gamePK}/{mediaId}", baseball_pipe.webpage_gen.broadcast_page2.serve_broadcast)
         # self.app.router.add_get("/{gamePK}/{mediaId}/master.m3u8", self.serve_master_playlist)
         # self.app.router.add_get(r"/{gamePK}/{mediaId}/{playlist:.+\.m3u8}", self.serve_media_playlist)
         
