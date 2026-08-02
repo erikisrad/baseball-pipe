@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from baseball_pipe.mlbtv.token import Token
 
 from baseball_pipe.misc import utilities as u
-from baseball_pipe.misc import header_emulator as e
+from baseball_pipe.misc import header_handler as e
 import aiohttp
 import m3u8
 
@@ -31,7 +31,7 @@ class Stream():
 
     async def inititialize(self):
         if not self._master_playlist_url:
-            await self._gen_master_playlist_url 
+            await self._gen_master_playlist_url()
 
     def reset(self):
 
@@ -61,7 +61,7 @@ class Stream():
     async def get_master_playlist_url(self):
         if not self._master_playlist_url:
             await self._gen_master_playlist_url()
-        return self._gen_master_playlist_url
+        return self._master_playlist_url
 
     async def get_master_playlist(self):
         await self._gen_master_playlist()
@@ -86,6 +86,12 @@ class Stream():
 
         return self._upstream_base_url
 
+    async def get_segment(self, path):
+        if not self._upstream_base_url:
+            await self._gen_master_playlist_url()
+
+        return await self._gen_segment(path)
+
     @staticmethod
     def _parse_expiration(expiration: str) -> datetime:
         expiration = re.sub(r'(\.\d{6})\d*Z$', r'\1+00:00', expiration)
@@ -99,7 +105,7 @@ class Stream():
         try:
             expiration = self._parse_expiration(self._expiration)
             seconds_until_expired = round((expiration - datetime.now(timezone.utc)).total_seconds())
-            logger.info(f"stream {self} expires in {seconds_until_expired} seconds")
+            logger.debug(f"stream {self} expires in {seconds_until_expired} seconds")
             return seconds_until_expired <= 30
         except Exception as err:
             logger.warning(f"Unable to determine expiration for {self} stream: {err}")
@@ -317,3 +323,25 @@ class Stream():
             logger.error(f"Failed to parse media playlist {playlist} for {self} stream\nresult: {res_text}\n{err}")
 
         self._variant_playlists[playlist] = res_text
+
+    async def _gen_segment(self, path):
+
+        if not self._upstream_base_url:
+            await self._gen_master_playlist_url()
+
+        target = self._upstream_base_url + path
+
+        headers = {
+            **e.MEDIA_HEADER,
+            "Accept": "*/*",
+            "Accept-Encoding": "identity;q=1, *;q=0",
+            "Sec-Fetch-Dest": "video",
+            "Sec-Fetch-Mode": "no-cors",
+            "Sec-Fetch-Site": "same-origin",
+        }
+
+        logger.info(f"sending segment request to {target}")
+        async with self.session.get(target, headers=headers, proxy=self.proxy, ssl=False) as res:
+            if res.status != 200:
+                raise Exception(f"Failed segment request: {res.status} {res.reason}")
+            return await res.read()

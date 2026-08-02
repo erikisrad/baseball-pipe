@@ -2,7 +2,7 @@ from datetime import datetime
 import logging
 import aiohttp
 import baseball_pipe.misc.utilities as u
-import baseball_pipe.misc.header_emulator as e
+import baseball_pipe.misc.header_handler as e
 
 logger = logging.getLogger(__name__)
 

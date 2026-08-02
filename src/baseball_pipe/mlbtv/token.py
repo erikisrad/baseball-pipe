@@ -32,7 +32,7 @@ class Token:
         return round((self.expires_datetime - get_current_datetime()).total_seconds())
     
     def is_expired(self):
-        logger.info(f"token expires in {self.secs_until_expired()} seconds")
+        logger.debug(f"token expires in {self.secs_until_expired()} seconds")
         return self.secs_until_expired() <= 30
     
 class TokenParseError(Exception):

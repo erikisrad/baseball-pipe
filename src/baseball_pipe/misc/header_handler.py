@@ -47,7 +47,15 @@ ACCOUNT_HEADER = {
 
 MEDIA_HEADER = {
     **FINGERPRINT_HEADER,
-    "Accept-Encoding": ACCEPT_ENCODING,
     "Priority": PRIORITY
 }
+
+def cors_headers(content_type=None):
+    headers = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "*"
+    }
+    if content_type:
+        headers["Content-Type"] = content_type
+    return headers
 

@@ -53,7 +53,7 @@ def pretty_print_date(date):
 def machine_print_date(date):
     return date.strftime("%Y%m%d")
 
-def pretty_print_time_in_tz(origin, tz):
+def localize(origin, tz):
     if isinstance(origin, str):
         dt_utc = datetime.fromisoformat(origin.replace("Z", "+00:00"))
     elif isinstance(origin, datetime):
@@ -62,8 +62,11 @@ def pretty_print_time_in_tz(origin, tz):
             dt_utc = dt_utc.replace(tzinfo=ZoneInfo("UTC"))
     else:
         raise ValueError(f"origin must be a string or datetime, got {type(origin)}")
-    
-    dt_local = dt_utc.astimezone(ZoneInfo(tz))
+
+    return dt_utc.astimezone(ZoneInfo(tz))
+
+def pretty_print_time_in_tz(origin, tz):
+    dt_local = localize(origin, tz)
     pretty_time = dt_local.strftime("%I:%M%p").lstrip("0")
     pretty_time = pretty_time[:-1] if pretty_time.endswith("M") else pretty_time
     return pretty_time.lower()
@@ -84,7 +87,7 @@ def presenter_remover(name):
     if not name or not isinstance(name, str):
         return name
 
-    presented_idx = name.lower().find(', presented by')
+    presented_idx = name.lower().find('presented by')
     if presented_idx != -1:
-        name = name[:presented_idx].strip()
+        name = name[:presented_idx].strip().rstrip(',').strip()
     return name

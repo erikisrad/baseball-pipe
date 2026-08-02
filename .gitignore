@@ -1,5 +1,6 @@
 .vscode
 __pycache__
 *secret*
+*m3u8*
 venv/
 logs/

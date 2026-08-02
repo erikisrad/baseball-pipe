@@ -4,7 +4,7 @@ import hashlib
 import aiohttp
 import baseball_pipe.misc.utilities as u
 from baseball_pipe.mlbtv.token import Token
-import baseball_pipe.misc.header_emulator as e
+import baseball_pipe.misc.header_handler as e
 import baseball_pipe.mlbtv.stream
 import logging
 import os

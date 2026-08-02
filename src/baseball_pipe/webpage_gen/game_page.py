@@ -33,8 +33,9 @@ async def serve_game(request):
 
     date = baseball_pipe.mlb.mlb_stats.get_game_datetime(game)
     if date:
-        date_str = u.pretty_print_date(date)
-        back_str = u.machine_print_date(date)
+        local_date = u.localize(date, local_tz)
+        date_str = u.pretty_print_date(local_date)
+        back_str = u.machine_print_date(local_date)
     else:
         date_str = "Unknown date"
         back_str = ""

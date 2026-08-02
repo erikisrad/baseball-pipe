@@ -1,47 +1,15 @@
 import logging
-import os
-from urllib.parse import urljoin
-from aiohttp import web
-import jinja2
+import aiohttp_jinja2
 
 from baseball_pipe.webpage_gen.game_page import serve_no_game
 from baseball_pipe.webpage_gen.broadcast_page import serve_no_broadcast
 import baseball_pipe.mlb.mlb_stats
 import baseball_pipe.misc.utilities as u
+from baseball_pipe.misc.header_handler import cors_headers
 from baseball_pipe.mlbtv.account import Account
 from baseball_pipe.mlbtv.stream import Stream
 
 logger = logging.getLogger(__name__)
-PACKAGE_ROOT = os.path.dirname(os.path.dirname(__file__))
-HTML_DIR = os.path.join(PACKAGE_ROOT, "html")
-
-jinja_env = jinja2.Environment(
-    loader=jinja2.FileSystemLoader(HTML_DIR),
-    autoescape=jinja2.select_autoescape(["html"])
-)
-
-async def gen_variant_rows(stream, video_url):
-    variants = await stream.get_variants()
-    if not variants:
-        return []
-
-    upstream_base_url = await stream.get_upstream_base_url()
-    rows = []
-    for variant in variants:
-        xres, yres = variant.stream_info.resolution or ("?", "?")
-        fps = variant.stream_info.frame_rate or "?"
-        bps = variant.stream_info.bandwidth or 0
-        mbps = bps / 1_000_000
-
-        rows.append({
-            "col_res": f"{xres}x{yres},".ljust(11),
-            "col_fps": f"{fps} fps,".ljust(11),
-            "col_mbps": f"{mbps:.2f} Mbps".ljust(9),
-            "proxied_url": urljoin(video_url, variant.uri),
-            "raw_url": urljoin(upstream_base_url, variant.uri),
-        })
-
-    return rows
 
 async def serve_broadcast(request):
 
@@ -99,6 +67,7 @@ async def serve_broadcast(request):
     #TIME
     date = baseball_pipe.mlb.mlb_stats.get_game_datetime(game)
     if date:
+        local_date = u.localize(date, local_tz)
         local_time_str = u.pretty_print_time_in_tz(date, local_tz)
         local_offset = u.get_tz_as_offset(local_tz)
         if venue_tz:
@@ -111,14 +80,13 @@ async def serve_broadcast(request):
             logger.warning(f"missing venue timezone for game {gamePK}")
             time_str = f"{local_time_str} {local_offset}"
     else:
+        local_date = None
         time_str = ""
 
     #STREAM
-    video_url = f"/{gamePK}/{mediaId}/master.m3u8"
+    video_url = f"{base_url}/{gamePK}/{mediaId}/master.m3u8"
 
     error = None
-    variants = []
-    master_playlist_url = None
     try:
         stream: Stream = await mlbtv_account.get_stream(gamePK, mediaId)
         await stream.inititialize()
@@ -126,30 +94,21 @@ async def serve_broadcast(request):
         logger.error(f"failed to get master playlist url for {gamePK}/{mediaId}: {err}")
         error = err
 
-    if not error:
-        variants = await gen_variant_rows(stream, video_url)
-        master_playlist_url = await stream.get_master_playlist_url()
-
-    template = jinja_env.get_template("broadcast2.html")
-    html = template.render(
-        p_date=u.pretty_print_date(date),
-        away_name=away_name,
-        home_name=home_name,
-        broadcast_name=broadcast_name,
-        series_description=series_description,
-        series_string=series_string,
-        time_str=time_str,
-        error=error,
-        cast_type=cast_type,
-        video_url=video_url,
-        variants=variants,
-        master_playlist_url=master_playlist_url,
-        back_url=f"{base_url}/{gamePK}",
-    )
+    response = aiohttp_jinja2.render_template("broadcast2.html", request, {
+        "p_date": u.pretty_print_date(local_date) if local_date else "Unknown date",
+        "away_name": away_name,
+        "home_name": home_name,
+        "broadcast_name": broadcast_name,
+        "series_description": series_description,
+        "series_string": series_string,
+        "time_str": time_str,
+        "error": error,
+        "cast_type": cast_type,
+        "video_url": video_url,
+        "back_url": f"{base_url}/{gamePK}",
+    })
+    response.headers.update(cors_headers())
 
     logger.info(f"returning {gamePK}/{mediaId} broadcast page to {u.get_ip_from_request(request)}")
 
-    return web.Response(text=html, content_type="text/html", headers={
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "*"
-    })
+    return response

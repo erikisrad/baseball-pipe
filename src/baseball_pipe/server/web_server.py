@@ -3,6 +3,8 @@ from aiohttp import web
 import logging as logger
 
 import aiohttp
+import aiohttp_jinja2
+import jinja2
 import baseball_pipe.webpage_gen.login_page
 import baseball_pipe.webpage_gen.date_page
 import baseball_pipe.webpage_gen.game_page
@@ -13,13 +15,17 @@ import baseball_pipe.mlbtv.account
 AT = " @ "
 SPC = "&nbsp;"
 
+PACKAGE_ROOT = os.path.dirname(os.path.dirname(__file__))
+HTML_DIR = os.path.join(PACKAGE_ROOT, "html")
+
 @web.middleware
 async def auth_middleware(request, handler):
     path = request.path
 
-    if (path == "/login"
+    if (request.method == "OPTIONS"
+        or path == "/login"
         or path.startswith("/static")
-        or path.endswith(".m3u8")):
+        or path.endswith((".m3u8", ".ts", ".aac", ".key", ".vtt"))):
 
         return await handler(request)
 
@@ -45,6 +51,7 @@ class WebServer:
         self.proxy_url = proxy_url
         self.app = web.Application(middlewares=[auth_middleware])
         self.app.router.add_static("/static", "baseball_pipe/static")
+        aiohttp_jinja2.setup(self.app, loader=jinja2.FileSystemLoader(HTML_DIR))
 
     async def on_startup(self, app):
         self.master_session = aiohttp.ClientSession()
@@ -56,8 +63,6 @@ class WebServer:
         app["mlbtv_account"] = self.mlbtv_account
         app["proxy_url"] = self.proxy_url
 
-        await self.mlbtv_account.test()
-
     async def on_cleanup(self, app):
         if self.master_session:
             await self.master_session.close()
@@ -67,6 +72,9 @@ class WebServer:
 
         self.app.on_startup.append(self.on_startup)
         self.app.on_cleanup.append(self.on_cleanup)
+
+        # CORS preflight, catch-all
+        self.app.router.add_route("OPTIONS", "/{tail:.*}", baseball_pipe.server.router.serve_options)
 
         # Named keyword routes
         self.app.router.add_get("/today", baseball_pipe.server.router.serve_today)
@@ -78,9 +86,7 @@ class WebServer:
         self.app.router.add_get(r"/{date:\d{8}}", baseball_pipe.webpage_gen.date_page.serve_date)
         self.app.router.add_get(r"/{gamePK:\d{1,6}}", baseball_pipe.webpage_gen.game_page.serve_game)
         self.app.router.add_get("/{gamePK}/{mediaId}", baseball_pipe.webpage_gen.broadcast_page2.serve_broadcast)
-        # self.app.router.add_get("/{gamePK}/{mediaId}/master.m3u8", self.serve_master_playlist)
-        # self.app.router.add_get(r"/{gamePK}/{mediaId}/{playlist:.+\.m3u8}", self.serve_media_playlist)
-        
+        self.app.router.add_get(r"/{gamePK}/{mediaId}/{path:.+}", baseball_pipe.server.router.route_media)
 
         logger.info(f"Starting web server at http://{self.host}:{self.port}")
         web.run_app(self.app, host=self.host, port=self.port)
