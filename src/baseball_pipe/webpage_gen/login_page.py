@@ -47,7 +47,7 @@ async def login(request):
             "auth",
             cookie_value,
             httponly=True,
-            secure=True,
+            secure=(request.scheme == "https"),
             samesite="Strict",
             max_age=60*60*24*30
         )
@@ -56,7 +56,7 @@ async def login(request):
             "tz",
             tz,
             httponly=False,
-            secure=True,
+            secure=(request.scheme == "https"),
             samesite="Strict",
             max_age=60*60*24*30
         )

@@ -32,6 +32,8 @@ class Account():
 
         self.reset()
 
+        logger.info(f"mlbtv account initialized for {self.u} with proxy {self.proxy}")
+
     def reset(self):
         self._streams = {}
         self._interaction_handle = None

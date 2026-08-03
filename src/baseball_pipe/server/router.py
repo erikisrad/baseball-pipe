@@ -1,8 +1,11 @@
+import os
 from aiohttp import web
 import baseball_pipe.misc.utilities as u
 import baseball_pipe.webpage_gen.media_handler as media_handler
 from baseball_pipe.mlbtv.account import Account
 from baseball_pipe.mlbtv.stream import Stream
+
+STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
 
 
 async def serve_today(request: web.Request):
@@ -29,6 +32,9 @@ async def route_media(request: web.Request):
         return await media_handler.serve_variant_playlist(request, stream, path)
 
     return await media_handler.serve_segment(request, stream, path)
+
+async def serve_favicon(request: web.Request):
+    return web.FileResponse(os.path.join(STATIC_DIR, "favicon.ico"))
 
 async def serve_options(request: web.Request):
     return web.Response(

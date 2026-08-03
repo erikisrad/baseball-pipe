@@ -35,9 +35,6 @@ class Stream():
 
     def reset(self):
 
-        #misc
-        self._expiration = None
-
         # via _gen_session()
         self._device_id = ""
         self._session_id = None

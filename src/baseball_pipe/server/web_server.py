@@ -42,7 +42,7 @@ async def auth_middleware(request, handler):
 
 class WebServer:
     def __init__(self,
-                 host="127.0.0.1",
+                 host="0.0.0.0",
                  port=8080,
                  proxy_url:str=os.environ["bbp_proxy_url"]):
 
@@ -56,7 +56,7 @@ class WebServer:
     async def on_startup(self, app):
         self.master_session = aiohttp.ClientSession()
 
-        self.mlbtv_account = baseball_pipe.mlbtv.account.Account(self.master_session, proxy=None)
+        self.mlbtv_account = baseball_pipe.mlbtv.account.Account(self.master_session, proxy=self.proxy_url)
         await self.mlbtv_account._gen_token()
 
         app["master_session"] = self.master_session
@@ -75,6 +75,8 @@ class WebServer:
 
         # CORS preflight, catch-all
         self.app.router.add_route("OPTIONS", "/{tail:.*}", baseball_pipe.server.router.serve_options)
+
+        self.app.router.add_get("/favicon.ico", baseball_pipe.server.router.serve_favicon)
 
         # Named keyword routes
         self.app.router.add_get("/today", baseball_pipe.server.router.serve_today)

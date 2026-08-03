@@ -12,7 +12,15 @@ logger = logging.getLogger(__name__)
 
 def safe_get(data, *keys, default=None):
     for key in keys:
-        if not isinstance(data, dict) or key not in data:
+        if isinstance(data, dict):
+            if key not in data:
+                logger.warning(f"missing key {'.'.join(map(str, keys))} (failed at {key!r}), using default {default!r}")
+                return default
+        elif isinstance(data, (list, tuple)):
+            if not isinstance(key, int) or not -len(data) <= key < len(data):
+                logger.warning(f"missing key {'.'.join(map(str, keys))} (failed at {key!r}), using default {default!r}")
+                return default
+        else:
             logger.warning(f"missing key {'.'.join(map(str, keys))} (failed at {key!r}), using default {default!r}")
             return default
         data = data[key]
