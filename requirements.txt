@@ -4,4 +4,4 @@ aiohttp-remotes
 jinja2
 m3u8
 pytz
-requests
+tzdata
