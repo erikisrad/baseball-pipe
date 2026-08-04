@@ -1,0 +1,10 @@
+/etc/systmd/system/baseball-pipe.service
+	controls service config
+	
+/etc/baseball-pipe.env
+	controls environment variables, limited access
+	
+sudo useradd -r -s /usr/sbin/nologin baseball-pipe
+
+sudo chown baseball-pipe:baseball-pipe /etc/baseball-pipe.env
+sudo chmod 600 /etc/baseball-pipe.env

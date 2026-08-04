@@ -5,6 +5,7 @@ import logging as logger
 import aiohttp
 import aiohttp_jinja2
 import jinja2
+from aiohttp_remotes import setup as setup_remotes, XForwardedRelaxed
 import baseball_pipe.webpage_gen.login_page
 import baseball_pipe.webpage_gen.date_page
 import baseball_pipe.webpage_gen.game_page
@@ -42,18 +43,21 @@ async def auth_middleware(request, handler):
 
 class WebServer:
     def __init__(self,
-                 host="0.0.0.0",
+                 host="127.0.0.1",
                  port=8080,
                  proxy_url:str=os.environ["bbp_proxy_url"]):
 
         self.host = host
         self.port = port
         self.proxy_url = proxy_url
-        self.app = web.Application(middlewares=[auth_middleware])
+        self.app = web.Application()
         self.app.router.add_static("/static", "baseball_pipe/static")
         aiohttp_jinja2.setup(self.app, loader=jinja2.FileSystemLoader(HTML_DIR))
 
     async def on_startup(self, app):
+        await setup_remotes(app, XForwardedRelaxed())
+        app.middlewares.append(auth_middleware)
+
         self.master_session = aiohttp.ClientSession()
 
         self.mlbtv_account = baseball_pipe.mlbtv.account.Account(self.master_session, proxy=self.proxy_url)
