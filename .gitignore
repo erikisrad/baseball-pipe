@@ -4,3 +4,5 @@ __pycache__
 *m3u8*
 venv/
 logs/
+test_files/
+src/baseball_pipe/assets/filler/
