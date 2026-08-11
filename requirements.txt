@@ -1,6 +1,7 @@
 aiohttp
 aiohttp-jinja2
 aiohttp-remotes
+curl_cffi
 jinja2
 m3u8
 pytz

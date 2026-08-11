@@ -5,13 +5,14 @@ import logging as logger
 import aiohttp
 import aiohttp_jinja2
 import jinja2
+from curl_cffi.requests import AsyncSession
 from aiohttp_remotes import setup as setup_remotes, XForwardedRelaxed
 import baseball_pipe.webpage_gen.login_page
 import baseball_pipe.webpage_gen.date_page
 import baseball_pipe.webpage_gen.game_page
 import baseball_pipe.server.router
 import baseball_pipe.webpage_gen.broadcast_page2
-import baseball_pipe.mlbtv.account
+import baseball_pipe.mlbtv.account2
 
 AT = " @ "
 SPC = "&nbsp;"
@@ -25,6 +26,7 @@ async def auth_middleware(request, handler):
 
     if (request.method == "OPTIONS"
         or path == "/login"
+        or path == "/favicon.ico"
         or path.startswith("/static")
         or path.endswith((".m3u8", ".ts", ".aac", ".key", ".vtt"))):
 
@@ -59,8 +61,9 @@ class WebServer:
         app.middlewares.append(auth_middleware)
 
         self.master_session = aiohttp.ClientSession()
+        self.auth_session = AsyncSession()
 
-        self.mlbtv_account = baseball_pipe.mlbtv.account.Account(self.master_session, proxy=self.proxy_url)
+        self.mlbtv_account = baseball_pipe.mlbtv.account2.Account(self.master_session, self.auth_session, proxy=self.proxy_url)
         await self.mlbtv_account._gen_token()
 
         app["master_session"] = self.master_session
@@ -70,6 +73,8 @@ class WebServer:
     async def on_cleanup(self, app):
         if self.master_session:
             await self.master_session.close()
+        if self.auth_session:
+            await self.auth_session.close()
 
     def start(self):
         logger.getLogger("aiohttp.access").setLevel(logger.WARNING)

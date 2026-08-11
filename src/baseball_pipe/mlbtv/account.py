@@ -113,6 +113,7 @@ class Account():
         logger.info(f"sending request to {interact_url}")
         async with self.session.post(interact_url, headers=headers, data=payload, proxy=self.proxy) as res:
             if res.status != 200:
+                logger.error(f"Failed to post interact: {res.status} {res.reason}")
                 raise Exception(f"Failed to post interact: {res.status} {res.reason}")
             res_json = await res.json()
 
@@ -136,6 +137,7 @@ class Account():
         logger.info(f"sending request to {INTROSPECT_URL}")
         async with self.session.post(INTROSPECT_URL, headers=headers, data=payload, proxy=self.proxy) as res:
             if res.status != 200:
+                logger.error(f"Failed to post introspect: {res.status} {res.reason}")
                 raise Exception(f"Failed to post introspect: {res.status} {res.reason}")
             res_json = await res.json()
 
@@ -159,6 +161,7 @@ class Account():
         logger.info(f"sending request to {IDENTITY_URL}")
         async with self.session.post(IDENTITY_URL, headers=headers, data=payload, proxy=self.proxy) as res:
             if res.status != 200:
+                logger.error(f"Failed to post identity: {res.status} {res.reason}")
                 raise Exception(f"Failed to post identity: {res.status} {res.reason}")
             res_json = await res.json()
 
@@ -196,6 +199,7 @@ class Account():
         logger.info(f"sending request to {CHALLENGE_URL}")
         async with self.session.post(CHALLENGE_URL, headers=headers, data=payload, proxy=self.proxy) as res:
             if res.status != 200:
+                logger.error(f"Failed to post challenge: {res.status} {res.reason}")
                 raise Exception(f"Failed to post challenge: {res.status} {res.reason}")
             res_json = await res.json()
 
@@ -219,6 +223,7 @@ class Account():
         logger.info(f"sending request to {ANSWER_URL}")
         async with self.session.post(ANSWER_URL, headers=headers, data=payload, proxy=self.proxy) as res:
             if res.status != 200:
+                logger.error(f"Failed to post answer: {res.status} {res.reason}")
                 raise Exception(f"Failed to post answer: {res.status} {res.reason}")
             res_json = await res.json()
 
@@ -260,6 +265,7 @@ class Account():
         logger.info(f"sending request to {TOKEN_URL}")
         async with self.session.post(TOKEN_URL, headers=headers, data=payload, proxy=self.proxy) as res:
             if res.status != 200:
+                logger.error(f"Failed to gen token: {res.status} {res.reason}")
                 raise Exception(f"Failed to gen token: {res.status} {res.reason}")
             res_json = await res.json()
 

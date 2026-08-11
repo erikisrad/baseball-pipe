@@ -1,6 +1,7 @@
 import logging
 import re
 from datetime import datetime, timezone
+import baseball_pipe.mlb.mlb_stats
 from baseball_pipe.mlbtv.token import Token
 
 from baseball_pipe.misc import utilities as u
@@ -34,6 +35,9 @@ class Stream():
             await self._gen_master_playlist_url()
 
     def reset(self):
+
+        self._start = None
+        self._end = None
 
         # via _gen_session()
         self._device_id = ""
@@ -88,6 +92,16 @@ class Stream():
             await self._gen_master_playlist_url()
 
         return await self._gen_segment(path)
+
+    async def get_start(self):
+        if not self._start:
+            self._start, self._end = await baseball_pipe.mlb.mlb_stats.get_game_start_end_times(self.game_pk, self.session)
+        return self._start
+
+    async def get_end(self):
+        if not self._end:
+            self._start, self._end = await baseball_pipe.mlb.mlb_stats.get_game_start_end_times(self.game_pk, self.session)
+        return self._end
 
     @staticmethod
     def _parse_expiration(expiration: str) -> datetime:

@@ -8,3 +8,8 @@ sudo useradd -r -s /usr/sbin/nologin baseball-pipe
 
 sudo chown baseball-pipe:baseball-pipe /etc/baseball-pipe.env
 sudo chmod 600 /etc/baseball-pipe.env
+
+/etc/nginx/sites-available/baseball-pipe
+	symlink at /sites-enabled/
+	controls nginx config
+	

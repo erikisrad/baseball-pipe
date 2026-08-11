@@ -1,21 +1,28 @@
 import os
+from datetime import datetime, timedelta, timezone
 from aiohttp import web
 import baseball_pipe.misc.utilities as u
 import baseball_pipe.webpage_gen.media_handler as media_handler
-from baseball_pipe.mlbtv.account import Account
+from baseball_pipe.mlbtv.account2 import Account
 from baseball_pipe.mlbtv.stream import Stream
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
 
 
 async def serve_today(request: web.Request):
-    return web.HTTPFound(location=f"/{u.machine_print_date(u.get_date())}")
+    local_tz = request.cookies.get("tz", "UTC")
+    date = u.localize(datetime.now(timezone.utc), local_tz)
+    return web.HTTPFound(location=f"/{u.machine_print_date(date)}")
 
 async def serve_yesterday(request: web.Request):
-    return web.HTTPFound(location=f"/{u.machine_print_date(u.get_date(days_ago=1))}")
+    local_tz = request.cookies.get("tz", "UTC")
+    date = u.localize(datetime.now(timezone.utc), local_tz) - timedelta(days=1)
+    return web.HTTPFound(location=f"/{u.machine_print_date(date)}")
 
 async def serve_tomorrow(request: web.Request):
-    return web.HTTPFound(location=f"/{u.machine_print_date(u.get_date(days_ago=-1))}")
+    local_tz = request.cookies.get("tz", "UTC")
+    date = u.localize(datetime.now(timezone.utc), local_tz) + timedelta(days=1)
+    return web.HTTPFound(location=f"/{u.machine_print_date(date)}")
 
 async def route_media(request: web.Request):
     gamePK = request.match_info.get("gamePK")

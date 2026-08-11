@@ -4,7 +4,7 @@ from aiohttp import web
 
 from baseball_pipe.mlbtv.stream import Stream
 from baseball_pipe.misc.header_handler import cors_headers
-from baseball_pipe.misc.stream_mangler import prefix_playlist_urls
+from baseball_pipe.misc.stream_mangler import prefix_playlist_urls, rewrite_media_playlist
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,12 @@ async def serve_variant_playlist(request: web.Request, stream: Stream, path: str
     playlist = await stream.get_media_playlist(path)
 
     own_base = f"{request.url.origin()}/{gamePK}/{mediaId}/"
-    playlist = prefix_playlist_urls(playlist, own_base)
+    playlist = rewrite_media_playlist(playlist,
+                                     own_base,
+                                     ad_free=True,
+                                     strip=True,
+                                     end_time=await stream.get_end(),
+                                     start_time=await stream.get_start())
 
     return web.Response(text=playlist, headers=cors_headers("application/vnd.apple.mpegurl"))
 

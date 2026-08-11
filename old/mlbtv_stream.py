@@ -18,7 +18,6 @@ logger = logging.getLogger(__name__)
 #GAME_PK = "777218"
 #MEDIA_ID = "408db4cb-41de-4805-80ea-62700421f33b"
 
-
 def uri_search_and_replace(line, full_url):
     logger.debug(f"rewriting URL for line {line}")
     old = URI_PATTERN.search(line)

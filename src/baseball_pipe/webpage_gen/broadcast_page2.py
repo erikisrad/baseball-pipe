@@ -6,7 +6,7 @@ from baseball_pipe.webpage_gen.broadcast_page import serve_no_broadcast
 import baseball_pipe.mlb.mlb_stats
 import baseball_pipe.misc.utilities as u
 from baseball_pipe.misc.header_handler import cors_headers
-from baseball_pipe.mlbtv.account import Account
+from baseball_pipe.mlbtv.account2 import Account
 from baseball_pipe.mlbtv.stream import Stream
 
 logger = logging.getLogger(__name__)
