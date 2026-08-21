@@ -1,8 +1,8 @@
 import logging
 import aiohttp_jinja2
+from aiohttp import web
 
 from baseball_pipe.webpage_gen.game_page import serve_no_game
-from baseball_pipe.webpage_gen.broadcast_page import serve_no_broadcast
 import baseball_pipe.mlb.mlb_stats
 import baseball_pipe.misc.utilities as u
 from baseball_pipe.misc.header_handler import cors_headers
@@ -112,3 +112,7 @@ async def serve_broadcast(request):
     logger.info(f"returning {gamePK}/{mediaId} broadcast page to {u.get_ip_from_request(request)}")
 
     return response
+
+def serve_no_broadcast(gamePK, mediaId):
+    logger.warning(f"no broadcast found for: {gamePK}/{mediaId}")
+    return web.Response(text=f"This isn't a valid mediaId ({mediaId}) for this gamePK ({gamePK})\nTry again", status=400)

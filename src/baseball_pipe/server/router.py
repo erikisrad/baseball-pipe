@@ -28,6 +28,13 @@ async def route_media(request: web.Request):
     gamePK = request.match_info.get("gamePK")
     mediaId = request.match_info.get("mediaId")
     path = request.match_info.get("path")
+
+    # filler segments are served straight from local disk, not proxied
+    # through the upstream MLB stream, so this needs to short-circuit before
+    # any of the stream/upstream-fetching logic below
+    if path.startswith("filler/"):
+        return await media_handler.serve_filler_segment(request, path)
+
     mlbtv_account: Account = request.app["mlbtv_account"]
 
     stream: Stream = await mlbtv_account.get_stream(gamePK, mediaId)
@@ -36,7 +43,7 @@ async def route_media(request: web.Request):
         return await media_handler.serve_master_playlist(request, stream)
 
     if path.endswith(".m3u8"):
-        return await media_handler.serve_variant_playlist(request, stream, path)
+        return await media_handler.serve_media_playlist(request, stream, path)
 
     return await media_handler.serve_segment(request, stream, path)
 

@@ -6,8 +6,9 @@ from baseball_pipe.mlbtv.token import Token
 
 from baseball_pipe.misc import utilities as u
 from baseball_pipe.misc import header_handler as e
+from baseball_pipe.playlist import generate_filler_segments as gfs
+from baseball_pipe.mlbtv import media_playlist
 import aiohttp
-import m3u8
 
 GRAPHQL_URL = "https://media-gateway.mlb.com/graphql"
 logger = logging.getLogger(__name__)
@@ -38,6 +39,7 @@ class Stream():
 
         self._start = None
         self._end = None
+        self._playlist_type = None
 
         # via _gen_session()
         self._device_id = ""
@@ -50,7 +52,9 @@ class Stream():
 
         # via _gen_master_playlist()
         self._master_playlist = None
-        self._variant_playlists = None
+
+        # via _gen_variants()
+        self._variants = None
 
     def __str__(self):
         return f"{self.game_pk}/{self.media_id}"
@@ -58,7 +62,16 @@ class Stream():
     def __repr__(self):
         return f"{self.game_pk}/{self.media_id}"
     
-    # GETS
+    # GETS /SETS
+    def get_playlist_type(self):
+        return self._playlist_type
+
+    def set_playlist_type(self, playlist_type):
+        playlist_type = playlist_type.lower()
+        if playlist_type not in ["vod", "live", "event"]:
+            raise ValueError(f"invalid playlist type: {playlist_type}")
+        self._playlist_type = playlist_type
+
     async def get_master_playlist_url(self):
         if not self._master_playlist_url:
             await self._gen_master_playlist_url()
@@ -68,18 +81,11 @@ class Stream():
         await self._gen_master_playlist()
         return self._master_playlist
 
-    async def get_media_playlist(self, playlist):
-        if not self._variant_playlists:
-            await self._gen_master_playlist()
+    async def get_variant(self, name):
+        if not self._variants:
+            await self._gen_variants()
 
-        await self._gen_media_playlist(playlist)
-        return self._variant_playlists[playlist]
-
-    async def get_variants(self):
-        if not self._variant_playlists:
-            await self._gen_master_playlist()
-
-        return self._variant_playlists
+        return self._variants.get(name, None)
 
     async def get_upstream_base_url(self):
         if not self._upstream_base_url:
@@ -295,45 +301,38 @@ class Stream():
         except Exception as err:
             logger.error(f"Failed to parse master playlist for {self} stream\n{res_text}\n{err}")
 
-        try:
-            variants = m3u8.loads(self._master_playlist).playlists
-            self._variant_playlists = dict.fromkeys(sorted(
-                variants,
-                key=lambda v: v.stream_info.bandwidth or 0,
-                reverse=True
-            ))
-        except Exception as err:
-            logger.warning(f"error generating variant playlists for {self} stream: {err}")
-            self._variant_playlists = None
+        if not self._variants:
+            await self._gen_variants()
 
-    async def _gen_media_playlist(self, playlist):
+    async def _gen_variants(self):
 
-        if not self._upstream_base_url:
-            await self._gen_master_playlist_url()
+        if not self._master_playlist:
+            await self._gen_master_playlist()
 
-        target = self._upstream_base_url + playlist
-
-        headers = {
-            **e.MEDIA_HEADER,
-            "Accept": "*/*",
-            "Accept-Encoding": "identity;q=1, *;q=0",
-            "Sec-Fetch-Dest": "video",
-            "Sec-Fetch-Mode": "no-cors",
-            "Sec-Fetch-Site": "same-origin",
-        }
-
-        logger.info(f"sending media playlist request to {target}")
-        async with self.session.get(target, headers=headers, proxy=self.proxy, ssl=False) as res:
-            if res.status != 200:
-                raise Exception(f"Failed media playlist request: {res.status} {res.reason}")
-            res_text = await res.text()
+        self._variants = {}
 
         try:
-            assert "#EXTM3U" in res_text
-        except Exception as err:
-            logger.error(f"Failed to parse media playlist {playlist} for {self} stream\nresult: {res_text}\n{err}")
+            lines = iter(self._master_playlist.splitlines())
+            for line in lines:
+                if line.startswith("#EXT-X-STREAM-INF:"):
+                    line = line.split(":", 1)[1]
+                    pairs = re.findall(r'([A-Z0-9-]+)=("[^"]*"|[^,]+)', line)
+                    media_dict = {k.lower(): v.strip('"') for k, v in pairs}
 
-        self._variant_playlists[playlist] = res_text
+                    next_line = next(lines)
+                    name = next_line.rsplit('/', 1)[-1]
+                    self._variants[name] = media_playlist.Playlist(self, name, media_dict)
+
+                elif line.startswith("#EXT-X-MEDIA:") and "URI=" in line:
+                    line = line.split(":", 1)[1]
+                    pairs = re.findall(r'([A-Z0-9-]+)=("[^"]*"|[^,]+)', line)
+                    media_dict = {k.lower(): v.strip('"') for k, v in pairs}
+
+                    name = media_dict.pop("URI")
+                    self._variants[name] = media_playlist.Playlist(self, name, media_dict)
+
+        except Exception as err:
+            logger.error(f"failed parsing variants for {self._master_playlist_url}: {err}")
 
     async def _gen_segment(self, path):
 

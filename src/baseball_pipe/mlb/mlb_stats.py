@@ -9,8 +9,6 @@ logger = logging.getLogger(__name__)
 SCHEDULE_URL_PREFIX = "https://statsapi.mlb.com/api/v1/schedule?"
 LIVE_FEED_URL_PREFIX = "https://statsapi.mlb.com/api/v1.1/game/"
 
-UNKNOWN_TIME = object()
-
 async def get_games_on_date(session:aiohttp.ClientSession, start_date, broadcasts:bool=False):
 
     if isinstance(start_date, datetime):
@@ -101,15 +99,15 @@ async def get_game_start_end_times(gamePK,
     plays = u.safe_get(res_json, "liveData", "plays", "allPlays", default=[])
     if not plays:
         logger.warning(f"no plays found for game {gamePK}")
-        return UNKNOWN_TIME, UNKNOWN_TIME
+        return None, None
 
     game_over = u.safe_get(res_json, "gameData", "status", "abstractGameState", default=None) == "Final"
 
     first_start = u.safe_get(plays, 0, "about", "startTime", default=None)
     last_end = u.safe_get(plays, -1, "about", "endTime", default=None) if game_over else None
 
-    first_start = datetime.fromisoformat(first_start.replace("Z", "+00:00")) - start_buffer if first_start else UNKNOWN_TIME
-    last_end = datetime.fromisoformat(last_end.replace("Z", "+00:00")) + end_buffer if game_over and last_end else UNKNOWN_TIME
+    first_start = datetime.fromisoformat(first_start.replace("Z", "+00:00")) - start_buffer if first_start else None
+    last_end = datetime.fromisoformat(last_end.replace("Z", "+00:00")) + end_buffer if game_over and last_end else None
 
     return first_start, last_end
 
