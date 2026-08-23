@@ -328,7 +328,7 @@ class Stream():
                     pairs = re.findall(r'([A-Z0-9-]+)=("[^"]*"|[^,]+)', line)
                     media_dict = {k.lower(): v.strip('"') for k, v in pairs}
 
-                    name = media_dict.pop("URI")
+                    name = media_dict.pop("uri")
                     self._variants[name] = media_playlist.Playlist(self, name, media_dict)
 
         except Exception as err:

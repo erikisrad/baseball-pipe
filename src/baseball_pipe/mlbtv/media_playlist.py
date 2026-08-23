@@ -26,11 +26,6 @@ DEFAULT = "default"
 CHANNELS = "channels"
 FORCED = "forced"
 
-#DERIVED
-SPLIT_RES = "split_resolution"
-NTSC_FPS = "ntsc_frame-rate"
-FILLER_DURATION = "filler_duration"
-
 #OTHER
 VIDEO = "VIDEO"
 
@@ -42,18 +37,21 @@ class Playlist():
         self.parent_stream = stream
         self.name = name
         self.mdict = media_dict
-        self.media = None
+        self._media = None
 
-        if RESOLUTION in media_dict and FRAME_RATE in media_dict:
+        self.type = None
+        self.resolution = None
+        self.frame_rate = None
+        self.filler_duration = None
+
+        if RESOLUTION in self.mdict and FRAME_RATE in self.mdict:
             try:
-                media_dict[TYPE] = VIDEO
-                size = tuple(map(int, media_dict[RESOLUTION].split("x")))
-                fps = gfs.ntsc_fraction_str(float(media_dict[FRAME_RATE]))
-                media_dict[SPLIT_RES] = size
-                media_dict[NTSC_FPS] = fps
-                media_dict[FILLER_DURATION] = gfs.ensure_rendition(size, fps)
+                self.type = VIDEO
+                self.resolution = tuple(map(int, self.mdict[RESOLUTION].split("x")))
+                self.frame_rate = gfs.ntsc_fraction_str(float(self.mdict[FRAME_RATE]))
+                self.filler_duration = gfs.ensure_rendition(self.resolution, self.frame_rate)
             except Exception as err:
-                logger.error(f"failed generating filler segments for {self._master_playlist_url} / {name}: {err}")
+                logger.error(f"failed generating filler segments for {self.parent_stream._master_playlist_url} / {name}: {err}")
                 raise
 
     def __str__(self):
@@ -62,16 +60,22 @@ class Playlist():
     def __repr__(self):
         return f"{self.parent_stream}/{self.name}"
 
+    def get_name(self):
+        return self.name
+
+    def get_parent_stream(self):
+        return self.parent_stream
+
     async def get_media(self):
-        await self._gen_media()
+        await self._gen_media_playlist()
         return self._media
 
-    async def _gen_media_playlist(self, playlist):
+    async def _gen_media_playlist(self):
     
         if not self.parent_stream._upstream_base_url:
             await self.parent_stream._gen_master_playlist_url()
 
-        target = self.parent_stream._upstream_base_url + playlist
+        target = self.parent_stream._upstream_base_url + self.name
 
         headers = {
             **e.MEDIA_HEADER,
@@ -83,7 +87,7 @@ class Playlist():
         }
 
         logger.info(f"sending media playlist request to {target}")
-        async with self.session.get(target, headers=headers, proxy=self.proxy, ssl=False) as res:
+        async with self.parent_stream.session.get(target, headers=headers, proxy=self.parent_stream.proxy, ssl=False) as res:
             if res.status != 200:
                 raise Exception(f"Failed media playlist request: {res.status} {res.reason}")
             res_text = await res.text()
@@ -91,6 +95,6 @@ class Playlist():
         try:
             assert "#EXTM3U" in res_text
         except Exception as err:
-            logger.error(f"Failed to parse media playlist {playlist} for {self} stream\nresult: {res_text}\n{err}")
+            logger.error(f"Failed to parse media playlist {self.name} for {self.parent_stream} stream\nresult: {res_text}\n{err}")
 
-        self._variants[playlist]['media'] = res_text
+        self._media = res_text
