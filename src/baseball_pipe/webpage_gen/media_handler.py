@@ -57,7 +57,7 @@ async def serve_filler_segment(request: web.Request, path: str):
         raise web.HTTPForbidden()
 
     if not os.path.isfile(file_path):
-        raise web.HTTPNotFound()
+        return web.HTTPNotFound()
 
     ext = os.path.splitext(file_path)[1].lower()
     content_type = SEGMENT_CONTENT_TYPES.get(ext, "application/octet-stream")

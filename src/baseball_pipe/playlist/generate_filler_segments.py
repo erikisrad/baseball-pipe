@@ -27,12 +27,42 @@ PACKAGE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # inside the actual package so the running server can find them at runtime
 OUTPUT_DIR = os.path.join(PACKAGE_DIR, "assets", "filler")
 
+# bundled font (DejaVu Sans, Bitstream Vera license -- see assets/fonts/LICENSE_DEJAVU)
+# so text rendering doesn't depend on "arial.ttf" happening to be resolvable
+# on whatever OS this runs on -- it isn't on a bare Linux server, which has
+# no Arial at all, and PIL has no equivalent of Windows' font-name lookup
+FONT_PATH = os.path.join(PACKAGE_DIR, "assets", "fonts", "DejaVuSans.ttf")
+
 # scratch PNG reused for every frame we render -- overwritten each iteration
 # rather than creating hundreds of throwaway image files. Lives in the OS
 # temp dir since it's disposable and has no reason to live in the repo
 TMP_PNG = os.path.join(tempfile.gettempdir(), "_filler_frame_tmp.png")
 
 MAX_SECONDS = 150  # observed ad breaks run ~120s; pad for safety
+TAG_TEXT = "BaseballPipe, By Erik R"
+
+# One fixed CBR target applied to every rendition, regardless of its own
+# resolution/declared bitrate. VHS estimates a segment's "bandwidth" as
+# bytes/downloadTime; a plain CRF-encoded static image collapses to ~15KB,
+# downloading in ~35ms almost entirely spent on TTFB, which produces a noisy
+# implied bandwidth (~3Mbps) landing in the middle of a real rendition ladder
+# instead of above it -- causing VHS to switch renditions on nearly every
+# filler segment, and each switch re-syncs to a point behind the
+# already-buffered frontier, which is what actually triggers the permanent
+# "excessive segment downloading" exclusion cascade (see the ad-break
+# investigation history for the full chain). Encoding at a fixed rate above
+# the highest bitrate we've observed in a real ladder (~9.6Mbps for a 7500K
+# tier) keeps every rendition's filler segment reading as high-bandwidth,
+# matching how real content naturally behaves, without needing a
+# resolution/bitrate table to keep in sync with the actual variant ladder.
+#
+# libx264's HRD filler-padding doesn't reach the nominal rate within a single
+# ~1s/30-frame buffer-fill window -- empirically it lands at ~80% of the
+# requested -b:v (measured: 12M request -> 9.69Mbps actual, right on top of
+# the 9.6Mbps ceiling we're trying to clear). Requesting 20M nets ~16Mbps
+# actual, giving real margin instead of none.
+FILLER_BITRATE = "20M"
+FILLER_BUFSIZE = "40M"
 
 def ntsc_fraction_str(fps_decimal, tolerance=0.001):
     """Recover the exact NTSC rational rate (e.g. "30000/1001") from a rounded decimal fps.
@@ -106,15 +136,19 @@ def make_filler_frame(seconds_remaining, size):
     # scale font sizes off frame height so smaller renditions still read fine
     big_size = max(20, H // 15)
     small_size = max(14, H // 22)
+    tag_size = max(10, H // 35)
     try:
-        font_big = ImageFont.truetype("arial.ttf", big_size)
-        font_small = ImageFont.truetype("arial.ttf", small_size)
+        font_big = ImageFont.truetype(FONT_PATH, big_size)
+        font_small = ImageFont.truetype(FONT_PATH, small_size)
+        font_tag = ImageFont.truetype(FONT_PATH, tag_size)
     except Exception:
-        # arial.ttf may not be resolvable on every machine/OS -- fall back
-        # to PIL's built-in bitmap font rather than crashing generation
+        # only reachable if the bundled font file itself is somehow missing
+        # or corrupted -- fall back to PIL's built-in bitmap font rather
+        # than crashing generation entirely
         logger.warning("falling back to default font for filler segment")
         font_big = ImageFont.load_default()
         font_small = ImageFont.load_default()
+        font_tag = ImageFont.load_default()
 
     def centered_text(y, text, font, fill, stroke_width=0, stroke_fill=None):
         # textbbox measures the pixel box the text would occupy if drawn at
@@ -139,20 +173,39 @@ def make_filler_frame(seconds_remaining, size):
         draw.text((W // 2 - w // 2, y), text, font=font, fill=fill,
                    stroke_width=stroke_width, stroke_fill=stroke_fill)
 
+    def bottom_right_text(text, font, fill, stroke_width=0, stroke_fill=None, margin=10):
+        # same idea as centered_text's width measurement, but anchored to
+        # the frame's bottom-right corner instead of horizontally centered
+        bbox = draw.textbbox((0, 0), text, font=font, stroke_width=stroke_width)
+        w = bbox[2] - bbox[0]
+        h = bbox[3] - bbox[1]
+        draw.text((W - margin - w, H - margin - h), text, font=font, fill=fill,
+                   stroke_width=stroke_width, stroke_fill=stroke_fill)
+
     # split total seconds into minutes/seconds for a "M:SS" style readout
     # (max(0, ...) guards against a negative countdown if this ever gets
     # called with a value past the ad break's actual end)
-    mins, secs = divmod(max(0, int(seconds_remaining)), 60)
-    countdown = f"{mins}:{secs:02d}"
-
+    try:
+        seconds_remaining = int(seconds_remaining)
+        if seconds_remaining <= 0:
+            countdown = ""
+        else:
+            mins, secs = divmod(max(0, int(seconds_remaining)), 60)
+            countdown = f"{mins}:{secs:02d}"
+    except Exception:
+        countdown = seconds_remaining
+        
     # black outline so the text stays readable over the background/crossbar
     big_stroke = max(1, big_size // 12)
     small_stroke = max(1, small_size // 12)
+    tag_stroke = max(1, tag_size // 12)
 
     centered_text(H // 2 - int(H * 0.093), "COMMERCIAL BREAK", font_big, (245, 245, 245),
                   stroke_width=big_stroke, stroke_fill=(0, 0, 0))
     centered_text(H // 2 + int(H * 0.028), countdown, font_small, (170, 175, 190),
                   stroke_width=small_stroke, stroke_fill=(0, 0, 0))
+    bottom_right_text(TAG_TEXT, font_tag, (170, 175, 190),
+                       stroke_width=tag_stroke, stroke_fill=(0, 0, 0))
 
     return img
 
@@ -167,6 +220,13 @@ def encode_ts(png_path, ts_path, size, fps, ts_offset):
         "-vf", f"scale={w}:{h}",
         "-r", str(fps),
         "-c:v", "libx264", "-profile:v", "main", "-pix_fmt", "yuv420p",
+        # force real CBR (not just a rate cap) so libx264 pads a static
+        # frame's near-empty encode out to FILLER_BITRATE with compliant
+        # H.264 filler-data NAL units, rather than undershooting it the way
+        # a plain -b:v ceiling would on genuinely static content
+        "-b:v", FILLER_BITRATE, "-minrate", FILLER_BITRATE, "-maxrate", FILLER_BITRATE,
+        "-bufsize", FILLER_BUFSIZE,
+        "-x264-params", "nal-hrd=cbr:force-cfr=1",
         "-c:a", "aac", "-b:a", "128k",
         # resend PAT/PMT at the start of this segment so a player tuning
         # into just this file (as HLS players do) can still decode it
@@ -188,21 +248,21 @@ def probe_duration(ts_path):
     return float(result.stdout.strip())
 
 def rendition_segment_duration(size, fps):
-    """Probe the real encoded duration of a rendition's filler segments via segment 1.
+    """Probe the real encoded duration of a rendition's filler segments via segment 0.
 
     All 151 segments in a rendition share the same encode settings, so
-    segment 1's measured duration stands in for the whole set. Callers need
+    segment 0's measured duration stands in for the whole set. Callers need
     this instead of assuming a fixed nominal duration like 1.001s -- AAC's
     1024-sample frame boundaries push the real container duration slightly
     past the video track's own length (see probe_duration()).
     """
-    ts_path = os.path.join(rendition_dir(size, fps), "filler_001.ts")
+    ts_path = os.path.join(rendition_dir(size, fps), "filler_000.ts")
     return probe_duration(ts_path)
 
 def verify_segment_durations():
     """Walk every generated filler segment on disk and confirm they all share one duration.
 
-    rendition_segment_duration() assumes one probed file (segment 1) speaks
+    rendition_segment_duration() assumes one probed file (segment 0) speaks
     for every segment in every rendition -- this actually checks that
     assumption across the whole assets/filler/ tree instead of just trusting
     it. Returns the shared duration if every segment agrees (within a small
@@ -245,16 +305,8 @@ def generate_rendition(size, fps):
     # since that's the order segments actually get spliced into a live ad break --
     # timestamps must continue in that order, not by filename/index
     logger.info(f"generating filler segments for {size[0]}x{size[1]} @ {fps}fps into {output_dir}")
-    for seconds_remaining in range(MAX_SECONDS, -1, -1):
+    for seconds_remaining in range(MAX_SECONDS, -121, -1):
         ts_path = os.path.join(output_dir, f"filler_{seconds_remaining:03d}.ts")
-
-        # if os.path.exists(ts_path):
-        #     # already generated on a previous run -- don't waste time re-encoding it,
-        #     # but we still need its real duration to keep cumulative_offset accurate
-        #     # for whichever segment comes next
-        #     cumulative_offset += probe_duration(ts_path)
-        #     skipped_count += 1
-        #     continue
 
         frame = make_filler_frame(seconds_remaining, size)
         frame.save(TMP_PNG)
@@ -294,5 +346,3 @@ def ensure_rendition(size, fps):
     extinf_path = os.path.join(rendition_dir(size, fps), "EXTINF")
     with open(extinf_path) as f:
         return float(f.read().strip())
-
-

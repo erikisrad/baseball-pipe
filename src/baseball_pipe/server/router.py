@@ -34,7 +34,7 @@ async def route_media(request: web.Request):
     # it too (gamePK=".well-known", mediaId="appspecific") -- reject it
     # before wasting a real upstream MLB API call on a bogus mediaId
     if gamePK == ".well-known":
-        raise web.HTTPNotFound()
+        return web.HTTPNotFound()
 
     # filler segments are served straight from local disk, not proxied
     # through the upstream MLB stream, so this needs to short-circuit before

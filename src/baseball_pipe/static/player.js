@@ -24,6 +24,12 @@ document.addEventListener('DOMContentLoaded', function() {
    // Initialize the player
    var player = videojs('hls-cast-player', options);
 
+   // videojs.log.level('all') alone doesn't unlock VHS's internal debug
+   // logger (it's gated behind log.debug, not log.level) -- player.debug(true)
+   // is the call that actually flips it on, surfacing granular VHS internals
+   // like buffer-stall counts and exclusion reasons leading up to a rendition switch
+   player.debug(true);
+
    player.ready(function() {
       console.log('--- DEBUG: Video.js Ready ---');
       
@@ -81,5 +87,56 @@ document.addEventListener('DOMContentLoaded', function() {
         src: src,
         type: 'application/x-mpegURL'
     });
+
+    // 5. Buffer instrumentation -- logs the *actual* buffered() TimeRanges on
+    // every segment append, so we can see the real numbers behind VHS's
+    // PlaybackWatcher.checkSegmentDownloads_ (it excludes a playlist forever
+    // once its buffered() snapshot is byte-identical across 10 straight
+    // appendsdone checks -- we need the real start/end values to know why it
+    // isn't changing, since the console's plain-text export only shows
+    // "buffered: Array(1)" with no expanded contents).
+    function attachBufferLogging() {
+        const tech = player.tech({ IWillNotUseThisInPlugins: true });
+        const vhs = tech && tech.vhs;
+        const mainLoader = vhs && vhs.masterPlaylistController_ && vhs.masterPlaylistController_.mainSegmentLoader_;
+        if (!mainLoader) {
+            return false;
+        }
+
+        mainLoader.on('appendsdone', function() {
+            try {
+                const buffered = mainLoader.buffered_();
+                const ranges = [];
+                for (let i = 0; i < buffered.length; i++) {
+                    ranges.push(buffered.start(i).toFixed(3) + '-' + buffered.end(i).toFixed(3));
+                }
+                // ranges is flattened to a plain string, not a nested array --
+                // DevTools' plain-text console export collapses nested
+                // objects/arrays to "Array(1)" with no expandable contents,
+                // which is exactly what made the first capture attempt useless
+                console.log('BUFFER DEBUG:', {
+                    currentTime: player.currentTime(),
+                    playlist: mainLoader.playlist_ && mainLoader.playlist_.id,
+                    ranges: ranges.join(', ')
+                });
+            } catch (e) {
+                console.error('BUFFER DEBUG: logging failed', e);
+            }
+        });
+
+        console.log('BUFFER DEBUG: attached to mainSegmentLoader_');
+        return true;
+    }
+
+    // player.src() above tears down and rebuilds the tech, so the segment
+    // loader we want doesn't exist yet at this point -- retry a few times
+    // rather than assuming any single event fires after it's ready.
+    let attachAttempts = 0;
+    const attachInterval = setInterval(function() {
+        attachAttempts++;
+        if (attachBufferLogging() || attachAttempts >= 20) {
+            clearInterval(attachInterval);
+        }
+    }, 250);
 
 });
