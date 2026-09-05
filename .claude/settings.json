@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(& \"C:\\\\Program Files\\\\Python310\\\\python.exe\" \"C:\\\\Users\\\\erik\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-erik-IdeaProjects-baseball-pipe\\\\4be17fa4-c0ad-46c8-a935-b294512dce05\\\\scratchpad\\\\scan_har_crash.py\")",
+      "PowerShell(& \"C:\\\\Program Files\\\\Python310\\\\python.exe\" \"C:\\\\Users\\\\erik\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-erik-IdeaProjects-baseball-pipe\\\\4be17fa4-c0ad-46c8-a935-b294512dce05\\\\scratchpad\\\\scan_har_overview.py\")",
+      "PowerShell(& \"C:\\\\Program Files\\\\Python310\\\\python.exe\" \"C:\\\\Users\\\\erik\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-erik-IdeaProjects-baseball-pipe\\\\4be17fa4-c0ad-46c8-a935-b294512dce05\\\\scratchpad\\\\scan_har2.py\")",
+      "PowerShell(& \"C:\\\\Program Files\\\\Python310\\\\python.exe\" \"C:\\\\Users\\\\erik\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-erik-IdeaProjects-baseball-pipe\\\\4be17fa4-c0ad-46c8-a935-b294512dce05\\\\scratchpad\\\\extract_playlists.py\")",
+      "PowerShell(& \"C:\\\\Program Files\\\\Python310\\\\python.exe\" \"C:\\\\Users\\\\erik\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-erik-IdeaProjects-baseball-pipe\\\\4be17fa4-c0ad-46c8-a935-b294512dce05\\\\scratchpad\\\\diff_ad_breaks.py\")",
+      "PowerShell(& \"C:\\\\Program Files\\\\Python310\\\\python.exe\" \"C:\\\\Users\\\\erik\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-erik-IdeaProjects-baseball-pipe\\\\4be17fa4-c0ad-46c8-a935-b294512dce05\\\\scratchpad\\\\extract_ranges.py\")",
+      "Bash(ffprobe -v error -select_streams v -show_entries frame=pkt_pts_time,pkt_dts_time,key_frame,pict_type -of csv C:/Users/erik/AppData/Local/Temp/claude/c--Users-erik-IdeaProjects-baseball-pipe/4be17fa4-c0ad-46c8-a935-b294512dce05/scratchpad/dur_test_2997.ts)",
+      "PowerShell(& \"C:\\\\Program Files\\\\Python310\\\\python.exe\" \"C:\\\\Users\\\\erik\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-erik-IdeaProjects-baseball-pipe\\\\4be17fa4-c0ad-46c8-a935-b294512dce05\\\\scratchpad\\\\test_nobframes.py\")",
+      "Bash(ffprobe -v error -select_streams v -show_entries frame=coded_picture_number,pkt_pts_time,pkt_dts_time,pts_time,dts_time,key_frame,pict_type -of csv C:/Users/erik/AppData/Local/Temp/claude/c--Users-erik-IdeaProjects-baseball-pipe/4be17fa4-c0ad-46c8-a935-b294512dce05/scratchpad/dur_test_nobf.ts)",
+      "PowerShell(& \"C:\\\\Program Files\\\\Python310\\\\python.exe\" \"C:\\\\Users\\\\erik\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-erik-IdeaProjects-baseball-pipe\\\\4be17fa4-c0ad-46c8-a935-b294512dce05\\\\scratchpad\\\\test_duration_fix.py\")",
+      "Bash(ffprobe -v error -select_streams v -show_entries frame=coded_picture_number,pkt_pts_time,key_frame,pict_type -of csv C:/Users/erik/AppData/Local/Temp/claude/c--Users-erik-IdeaProjects-baseball-pipe/4be17fa4-c0ad-46c8-a935-b294512dce05/scratchpad/dur_test_2997.ts)",
+      "Bash(ffmpeg -v error -i C:/Users/erik/AppData/Local/Temp/claude/c--Users-erik-IdeaProjects-baseball-pipe/4be17fa4-c0ad-46c8-a935-b294512dce05/scratchpad/dur_test_2997.ts -f null -)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(ffprobe -v error -select_streams v -show_entries frame=pts_time,dts_time,pict_type -of csv C:/Users/erik/AppData/Local/Temp/claude/c--Users-erik-IdeaProjects-baseball-pipe/4be17fa4-c0ad-46c8-a935-b294512dce05/scratchpad/dur_test_2997.ts)"
+    ]
+  }
+}

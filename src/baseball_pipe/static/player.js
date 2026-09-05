@@ -98,26 +98,32 @@ document.addEventListener('DOMContentLoaded', function() {
     function attachBufferLogging() {
         const tech = player.tech({ IWillNotUseThisInPlugins: true });
         const vhs = tech && tech.vhs;
-        const mainLoader = vhs && vhs.masterPlaylistController_ && vhs.masterPlaylistController_.mainSegmentLoader_;
+        const mpc = vhs && vhs.masterPlaylistController_;
+        const mainLoader = mpc && mpc.mainSegmentLoader_;
+        const sourceUpdater = mpc && mpc.sourceUpdater_;
         if (!mainLoader) {
             return false;
         }
 
+        // ranges is flattened to a plain string, not a nested array --
+        // DevTools' plain-text console export collapses nested
+        // objects/arrays to "Array(1)" with no expandable contents,
+        // which is exactly what made the first capture attempt useless
+        function rangesToString(buffered) {
+            const ranges = [];
+            for (let i = 0; i < buffered.length; i++) {
+                ranges.push(buffered.start(i).toFixed(3) + '-' + buffered.end(i).toFixed(3));
+            }
+            return ranges.join(', ');
+        }
+
         mainLoader.on('appendsdone', function() {
             try {
-                const buffered = mainLoader.buffered_();
-                const ranges = [];
-                for (let i = 0; i < buffered.length; i++) {
-                    ranges.push(buffered.start(i).toFixed(3) + '-' + buffered.end(i).toFixed(3));
-                }
-                // ranges is flattened to a plain string, not a nested array --
-                // DevTools' plain-text console export collapses nested
-                // objects/arrays to "Array(1)" with no expandable contents,
-                // which is exactly what made the first capture attempt useless
                 console.log('BUFFER DEBUG:', {
                     currentTime: player.currentTime(),
                     playlist: mainLoader.playlist_ && mainLoader.playlist_.id,
-                    ranges: ranges.join(', ')
+                    video: sourceUpdater && sourceUpdater.videoBuffer ? rangesToString(sourceUpdater.videoBuffer.buffered) : 'n/a',
+                    audio: sourceUpdater && sourceUpdater.audioBuffer ? rangesToString(sourceUpdater.audioBuffer.buffered) : 'n/a'
                 });
             } catch (e) {
                 console.error('BUFFER DEBUG: logging failed', e);

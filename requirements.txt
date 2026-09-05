@@ -1,8 +1,10 @@
 aiohttp
 aiohttp-jinja2
 aiohttp-remotes
+cryptography
 curl_cffi
 jinja2
 m3u8
+Pillow
 pytz
 tzdata

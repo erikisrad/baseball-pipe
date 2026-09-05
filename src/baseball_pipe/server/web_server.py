@@ -13,6 +13,7 @@ import baseball_pipe.webpage_gen.game_page
 import baseball_pipe.server.router
 import baseball_pipe.webpage_gen.broadcast_page2
 import baseball_pipe.mlbtv.account2
+import baseball_pipe.playlist.generate_filler_segments as gfs
 
 AT = " @ "
 SPC = "&nbsp;"
@@ -69,6 +70,8 @@ class WebServer:
         app["master_session"] = self.master_session
         app["mlbtv_account"] = self.mlbtv_account
         app["proxy_url"] = self.proxy_url
+
+        #gfs.verify_segment_durations()
 
     async def on_cleanup(self, app):
         if self.master_session:

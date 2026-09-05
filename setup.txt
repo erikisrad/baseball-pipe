@@ -13,3 +13,5 @@ sudo chmod 600 /etc/baseball-pipe.env
 	symlink at /sites-enabled/
 	controls nginx config
 	
+sudo apt update
+sudo apt install ffmpeg -y

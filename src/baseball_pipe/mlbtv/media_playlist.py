@@ -49,7 +49,9 @@ class Playlist():
                 self.type = VIDEO
                 self.resolution = tuple(map(int, self.mdict[RESOLUTION].split("x")))
                 self.frame_rate = gfs.ntsc_fraction_str(float(self.mdict[FRAME_RATE]))
-                self.filler_duration = gfs.ensure_rendition(self.resolution, self.frame_rate)
+                average_bandwidth = int(self.mdict[AVERAGE_BANDWIDTH])
+                codecs = self.mdict[CODECS]
+                self.filler_duration = gfs.ensure_rendition(self.resolution, self.frame_rate, average_bandwidth, codecs)
             except Exception as err:
                 logger.error(f"failed generating filler segments for {self.parent_stream._master_playlist_url} / {name}: {err}")
                 raise

@@ -1,5 +1,7 @@
+import asyncio
 import logging
 import os
+import subprocess
 from aiohttp import web
 
 from baseball_pipe.mlbtv.stream import Stream
@@ -43,6 +45,34 @@ async def serve_segment(request: web.Request, stream: Stream, path: str):
     data = await stream.get_segment(path)
     return web.Response(body=data, headers=cors_headers(content_type))
 
+def _run_ts_remux(file_path, output_ts_offset):
+    """Blocking. Stream-copy remux (-c copy, no re-encode) with the given
+    -output_ts_offset, piped straight to stdout -- no temp file at all.
+
+    -muxdelay/-muxpreload 0 disable ffmpeg's default mpegts "broadcast
+    preload" padding (see investigation history: without this, a requested
+    offset of 0 actually comes out around 1.42s later than asked). With them
+    off, a requested offset comes out within ~21ms of exact -- one AAC
+    frame's worth of unavoidable sample-rate quantization, not artificial
+    delay -- so the result can be trusted directly with no separate
+    measure-and-correct step needed.
+    """
+    result = subprocess.run([
+        "ffmpeg", "-y",
+        "-i", file_path,
+        "-c", "copy",
+        "-muxdelay", "0", "-muxpreload", "0",
+        "-output_ts_offset", f"{output_ts_offset:.6f}",
+        "-f", "mpegts", "pipe:1",
+    ], capture_output=True, check=True)
+    return result.stdout
+
+def _rewrite_segment_timestamps(file_path, target_offset):
+    """Blocking. Returns file_path's bytes with its embedded timestamps
+    shifted so its real start PTS equals target_offset (within ~21ms).
+    """
+    return _run_ts_remux(file_path, target_offset)
+
 async def serve_filler_segment(request: web.Request, path: str):
     # path is "filler/<resolution>/<framerate>/filler_NNN.ts" -- strip the
     # leading "filler/" so what's left is relative to gfs.OUTPUT_DIR itself
@@ -61,5 +91,16 @@ async def serve_filler_segment(request: web.Request, path: str):
 
     ext = os.path.splitext(file_path)[1].lower()
     content_type = SEGMENT_CONTENT_TYPES.get(ext, "application/octet-stream")
+
+    tsoffset = request.query.get("tsoffset")
+    if tsoffset is not None:
+        try:
+            target_offset = float(tsoffset)
+            data = await asyncio.to_thread(_rewrite_segment_timestamps, file_path, target_offset)
+            return web.Response(body=data, headers=cors_headers(content_type))
+        except Exception as err:
+            logger.warning(f"failed to rewrite timestamps for {file_path} (tsoffset={tsoffset}): {err}")
+            # fall through and serve the file unmodified rather than fail
+            # the whole request over a timestamp correction that didn't work
 
     return web.FileResponse(file_path, headers=cors_headers(content_type))

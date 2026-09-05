@@ -321,6 +321,16 @@ class Stream():
 
                     next_line = next(lines)
                     name = next_line.rsplit('/', 1)[-1]
+                    # Playlist.__init__ can synchronously trigger a full
+                    # filler-library generation run (ensure_rendition ->
+                    # generate_rendition -> up to ~271 blocking ffmpeg
+                    # encodes) the first time a resolution/fps is seen.
+                    # Running that via asyncio.to_thread let two concurrent
+                    # requests for the same never-yet-generated rendition
+                    # race into generate_rendition() at once, corrupting
+                    # segments (they share one intermediate TMP_PNG file) --
+                    # called synchronously here instead until that race is
+                    # fixed with proper per-rendition locking.
                     self._variants[name] = media_playlist.Playlist(self, name, media_dict)
 
                 elif line.startswith("#EXT-X-MEDIA:") and "URI=" in line:
