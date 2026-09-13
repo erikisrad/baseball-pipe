@@ -10,7 +10,7 @@ log_file_path = os.path.join(log_dir, f"{APP}.log")
 
 stdout_handler = logging.StreamHandler(sys.stdout)
 stdout_handler.setLevel(logging.INFO)
-file_handler = logging.FileHandler(filename=log_file_path)
+file_handler = logging.FileHandler(filename=log_file_path, mode='w')
 
 logging.basicConfig(handlers=[stdout_handler, file_handler], 
                     encoding='utf-8',

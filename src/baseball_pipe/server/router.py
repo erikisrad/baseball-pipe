@@ -57,6 +57,9 @@ async def route_media(request: web.Request):
 async def serve_favicon(request: web.Request):
     return web.FileResponse(os.path.join(STATIC_DIR, "favicon.ico"))
 
+async def serve_johnnysucks(request: web.Request):
+    return web.Response(text="fuck johnny")
+
 async def serve_options(request: web.Request):
     return web.Response(
         status=204, # "No Content", standard for a preflight response

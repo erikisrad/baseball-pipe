@@ -77,7 +77,7 @@ TAG_TEXT = "BaseballPipe, By Erik R"
 # ~1s/30-frame buffer-fill window -- empirically it lands at ~80% of the
 # requested -b:v, so real margin (not just noise-avoidance margin) has to be
 # requested to land close to the target.
-FILLER_BITRATE_HEADROOM = 1.3
+FILLER_BITRATE_HEADROOM = 0.8
 
 # HLS's CODECS attribute encodes H.264 profile/level directly (RFC 6381:
 # "avc1.PPCCLL", hex profile_idc/constraints/level_idc) -- mapping used by

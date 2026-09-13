@@ -89,8 +89,10 @@ class WebServer:
         self.app.router.add_route("OPTIONS", "/{tail:.*}", baseball_pipe.server.router.serve_options)
 
         self.app.router.add_get("/favicon.ico", baseball_pipe.server.router.serve_favicon)
+        self.app.router.add_get("/johnnysucks", baseball_pipe.server.router.serve_johnnysucks)
 
         # Named keyword routes
+        self.app.router.add_get("/", baseball_pipe.server.router.serve_today)
         self.app.router.add_get("/today", baseball_pipe.server.router.serve_today)
         self.app.router.add_get("/yesterday", baseball_pipe.server.router.serve_yesterday)
         self.app.router.add_get("/tomorrow", baseball_pipe.server.router.serve_tomorrow)

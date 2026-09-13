@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import subprocess
+import time
 from aiohttp import web
 
 from baseball_pipe.mlbtv.stream import Stream
@@ -96,7 +97,10 @@ async def serve_filler_segment(request: web.Request, path: str):
     if tsoffset is not None:
         try:
             target_offset = float(tsoffset)
+            func_start = time.perf_counter()
             data = await asyncio.to_thread(_rewrite_segment_timestamps, file_path, target_offset)
+            elapsed_ms = (time.perf_counter() - func_start) * 1000
+            logger.info(f"served filler segment {os.path.basename(file_path)} (tsoffset={target_offset:.6f}) in {elapsed_ms:.2f}ms")
             return web.Response(body=data, headers=cors_headers(content_type))
         except Exception as err:
             logger.warning(f"failed to rewrite timestamps for {file_path} (tsoffset={tsoffset}): {err}")
