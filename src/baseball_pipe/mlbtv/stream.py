@@ -9,9 +9,20 @@ from baseball_pipe.misc import header_handler as e
 from baseball_pipe.playlist import generate_filler_segments as gfs
 from baseball_pipe.mlbtv import media_playlist
 import aiohttp
+from dataclasses import dataclass
 
 GRAPHQL_URL = "https://media-gateway.mlb.com/graphql"
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class StreamTemplate():
+    line_count:int
+    playlist:list[str]
+    cued_out:bool # in ad break
+    stream_time:float # moving playlist timestamp
+    started_segments:bool # have we started writing segments yet
+
 
 class Stream():
 
@@ -41,6 +52,8 @@ class Stream():
         self._end = None
         self._playlist_type = None
 
+        self.template = StreamTemplate(line_count=0, playlist=[], cued_out=False, stream_time=None, started_segments=False)
+
         # via _gen_session()
         self._device_id = ""
         self._session_id = None
@@ -63,6 +76,16 @@ class Stream():
         return f"{self.game_pk}/{self.media_id}"
     
     # GETS /SETS
+    def get_template(self):
+        return self.template
+
+    def set_template(self, line_count, playlist, cued_out, stream_time, started_segments):
+        self.template.line_count = line_count
+        self.template.playlist = playlist
+        self.template.cued_out = cued_out
+        self.template.stream_time = stream_time
+        self.template.started_segments = started_segments
+
     def get_playlist_type(self):
         return self._playlist_type
 

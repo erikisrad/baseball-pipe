@@ -25,19 +25,12 @@ CUE_OUT_CONT_PATTERN = re.compile(r'ElapsedTime=([\d.]+),Duration=([\d.]+)')
 AUTOSELECT_PATTERN = re.compile(r'AUTOSELECT=YES')
 DEFAULT_PATTERN = re.compile(r'DEFAULT=YES')
 
-# real MLB ad segments run at their own upstream cadence (1-6s each), but the
-# filler library is a fixed 1-second-per-file countdown (see
-# generate_filler_segments.py) -- this is that filler segment's own encoded
-# duration, used so EXTINF stays accurate for the substituted content
-FILLER_SEGMENT_DURATION = 1.001
-
-# a live playlist is a growing window, not a sliding one -- every CUE-OUT
-# from earlier in the broadcast is still present and gets re-walked on every
-# poll (roughly once per second), so without caching, every already-finished
-# ad break's anchor gets re-fetched/decrypted/re-probed from scratch on every
-# single request. A real segment's own embedded end-PTS never changes, so
-# it's safe to compute once per (stream, segment path) and reuse forever.
-_ad_break_anchor_cache = {}
+# stream.template caches one rendition's rewritten playlist and is shared
+# across every rendition of the same stream (see Stream.template) -- segment
+# paths embed the rendition's own id (e.g. "823657-HD_7500K"), so that id
+# gets swapped for this placeholder before caching and swapped back in
+# (with whichever rendition is actually asking) on every read
+RENDITION_PLACEHOLDER = "{{RENDITION}}"
 
 
 def uri_search_and_replace(line, full_url):
@@ -47,35 +40,6 @@ def uri_search_and_replace(line, full_url):
     new = full_url + old.group(1)
     new_line = URI_PATTERN.sub(f'URI="{new}"', line)
     return new_line
-
-
-async def probe_encrypted_segment_end_pts(stream, segment_path, key_uri_path, iv_hex):
-    """Real MLB segments are AES-128-CBC encrypted on the wire, so ffprobe
-    can't read their embedded PTS without decrypting first. Fetches the
-    segment ciphertext and its key straight from upstream (segment_path and
-    key_uri_path are relative paths, exactly as they'd appear unrewritten in
-    the playlist -- stream.get_segment() prepends the upstream base URL and
-    handles auth itself), decrypts with the cryptography package, and hands
-    the plaintext to probe_end_timestamp() via a throwaway temp file.
-    """
-    key_bytes, ciphertext = await asyncio.gather(
-        stream.get_segment(key_uri_path),
-        stream.get_segment(segment_path),
-    )
-
-    iv_bytes = bytes.fromhex(iv_hex)
-    decryptor = Cipher(algorithms.AES(key_bytes), modes.CBC(iv_bytes)).decryptor()
-    padded = decryptor.update(ciphertext) + decryptor.finalize()
-    unpadder = sym_padding.PKCS7(128).unpadder()
-    plaintext = unpadder.update(padded) + unpadder.finalize()
-
-    fd, tmp_path = tempfile.mkstemp(suffix=".ts")
-    try:
-        with os.fdopen(fd, "wb") as f:
-            f.write(plaintext)
-        return await asyncio.to_thread(gfs.probe_end_timestamp, tmp_path)
-    finally:
-        os.remove(tmp_path)
 
 
 def force_autoselect_no(line):
@@ -119,18 +83,17 @@ async def rewrite_media_playlist(stream:Stream, name:str, own_base:str):
     playlist:Playlist = await stream.get_variant(name)
     assert playlist, f"unknown playlist {name} for stream {stream}"
 
-    playlist_media = await playlist.get_media()
-    lines = playlist_media.split('\n')
-
     if not stream.get_playlist_type():
+        playlist_media = await playlist.get_media()
+        lines = playlist_media.split('\n')
         stream.set_playlist_type(determine_playlist_type(lines))
 
     if stream.get_playlist_type() == "vod":
-        #return await nuke_playlist_ads(stream, playlist, lines, own_base)
-        return await fill_playlist_ads(stream, playlist, lines, own_base)
+        return await nuke_playlist_ads(stream, playlist, own_base)
+        #return await fill_playlist_ads(stream, playlist, own_base)
 
     else:
-        return await fill_playlist_ads(stream, playlist, lines, own_base)
+        return await fill_playlist_ads(stream, playlist, own_base)
 
         
 def determine_playlist_type(lines):
@@ -146,23 +109,34 @@ def determine_playlist_type(lines):
                 return "live"
 
             
-async def nuke_playlist_ads(stream:Stream, playlist:Playlist, lines:list, base_url:str):
+async def nuke_playlist_ads(stream:Stream, playlist:Playlist, base_url:str):
     func_start = time.perf_counter()
-    rewritten = [] # rewritten playlist
-    cued_out = False # in ad break
-    stream_time = None # moving playlist timestamp
-    started_segments = False # have we started writing segments yet
+
+    name = playlist.get_name()
+    rendition_id = name.rsplit('.', 1)[0] # "823657-HD_7500K.m3u8" -> "823657-HD_7500K"
+
+    template = stream.get_template()
+    rewritten = [line.replace(RENDITION_PLACEHOLDER, rendition_id) for line in template.playlist]
+    cued_out = template.cued_out
+    stream_time = template.stream_time
+    started_segments = template.started_segments
 
     end_time = await stream.get_end()
     start_time = await stream.get_start()
-    name = playlist.get_name()
+
+    fetch_start = time.perf_counter()
+    playlist_media = await playlist.get_media()
+    fetch_ms = (time.perf_counter() - fetch_start) * 1000
+
+    lines = playlist_media.split('\n')
+    new_lines = lines[template.line_count:]
 
     def can_write():
         return (not cued_out
                 and (not start_time or stream_time >= start_time)
                 and (not end_time or stream_time <= end_time))
 
-    for line in lines:
+    for line in new_lines:
 
         #EMPTY
         if not line:
@@ -261,8 +235,14 @@ async def nuke_playlist_ads(stream:Stream, playlist:Playlist, lines:list, base_u
             logger.warning(f"keeping unknown line: {line} for {stream}/{name}")
             rewritten.append(line)
 
+    # cache with this rendition's id swapped back out for the placeholder,
+    # so the next rendition to ask (possibly a different one) can drop its
+    # own id in rather than inheriting this one's segment paths
+    cache_lines = [line.replace(rendition_id, RENDITION_PLACEHOLDER) for line in rewritten]
+    stream.set_template(len(lines), cache_lines, cued_out, stream_time, started_segments)
+
     elapsed_ms = (time.perf_counter() - func_start) * 1000
-    logger.info(f"rewrote nuke playlist in {elapsed_ms:.2f}ms, {len(lines)} lines reduced to {len(rewritten)}")
+    logger.info(f"rewrote nuke playlist in {elapsed_ms:.2f}ms (upstream fetch {fetch_ms:.2f}ms), {len(new_lines)} new lines processed, {len(rewritten)} total lines")
     return '\n'.join(rewritten)
 
 

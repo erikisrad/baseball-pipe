@@ -85,7 +85,7 @@ class Playlist():
             "Accept-Encoding": "identity;q=1, *;q=0",
             "Sec-Fetch-Dest": "video",
             "Sec-Fetch-Mode": "no-cors",
-            "Sec-Fetch-Site": "same-origin",
+            "Sec-Fetch-Site": "same-origin"
         }
 
         logger.info(f"sending media playlist request to {target}")
