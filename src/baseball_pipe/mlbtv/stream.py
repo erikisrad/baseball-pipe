@@ -23,6 +23,12 @@ class StreamTemplate():
     stream_time:float # moving playlist timestamp
     started_segments:bool # have we started writing segments yet
 
+    #used for playlist filling
+    ad_elapsed:float
+    expected_ad_duration:float
+    last_key:str
+    last_segment:str
+
 
 class Stream():
 
@@ -52,7 +58,15 @@ class Stream():
         self._end = None
         self._playlist_type = None
 
-        self.template = StreamTemplate(line_count=0, playlist=[], cued_out=False, stream_time=None, started_segments=False)
+        self.template = StreamTemplate(line_count=0,
+                                       playlist=[],
+                                       cued_out=False,
+                                       stream_time=None,
+                                       started_segments=False,
+                                       ad_elapsed=0.0,
+                                       expected_ad_duration=0.0,
+                                       last_key=None,
+                                       last_segment=None)
 
         # via _gen_session()
         self._device_id = ""
@@ -79,12 +93,18 @@ class Stream():
     def get_template(self):
         return self.template
 
-    def set_template(self, line_count, playlist, cued_out, stream_time, started_segments):
+    def set_template(self, line_count, playlist, cued_out, stream_time, started_segments, ad_elapsed=0.0, expected_ad_duration=0.0, key_line=None, last_segment=None):
         self.template.line_count = line_count
         self.template.playlist = playlist
+
         self.template.cued_out = cued_out
         self.template.stream_time = stream_time
         self.template.started_segments = started_segments
+
+        self.template.ad_elapsed = ad_elapsed
+        self.template.expected_ad_duration = expected_ad_duration
+        self.template.last_key = key_line
+        self.template.last_segment = last_segment
 
     def get_playlist_type(self):
         return self._playlist_type

@@ -89,11 +89,11 @@ async def rewrite_media_playlist(stream:Stream, name:str, own_base:str):
         stream.set_playlist_type(determine_playlist_type(lines))
 
     if stream.get_playlist_type() == "vod":
-        return await nuke_playlist_ads(stream, playlist, own_base)
-        #return await fill_playlist_ads(stream, playlist, own_base)
+        #return await nuke_playlist_ads(stream, playlist, own_base)
+        return await fill_playlist_ads2(stream, playlist, own_base)
 
     else:
-        return await fill_playlist_ads(stream, playlist, own_base)
+        return await fill_playlist_ads2(stream, playlist, own_base)
 
         
 def determine_playlist_type(lines):
@@ -243,6 +243,197 @@ async def nuke_playlist_ads(stream:Stream, playlist:Playlist, base_url:str):
 
     elapsed_ms = (time.perf_counter() - func_start) * 1000
     logger.info(f"rewrote nuke playlist in {elapsed_ms:.2f}ms (upstream fetch {fetch_ms:.2f}ms), {len(new_lines)} new lines processed, {len(rewritten)} total lines")
+    return '\n'.join(rewritten)
+
+
+async def fill_playlist_ads2(stream:Stream, playlist:Playlist, base_url:str):
+    func_start = time.perf_counter()
+
+    name = playlist.get_name()
+    rendition_id = name.rsplit('.', 1)[0] # "823657-HD_7500K.m3u8" -> "823657-HD_7500K"
+
+    template = stream.get_template()
+    rewritten = [line.replace(RENDITION_PLACEHOLDER, rendition_id) for line in template.playlist]
+    cued_out = template.cued_out
+    stream_time = template.stream_time
+    started_segments = template.started_segments
+
+    ad_elapsed = template.ad_elapsed
+    expected_ad_duration = template.expected_ad_duration
+    last_key = template.last_key
+    last_segment = template.last_segment
+
+    end_time = await stream.get_end()
+    start_time = await stream.get_start()
+
+    fetch_start = time.perf_counter()
+    playlist_media = await playlist.get_media()
+    fetch_ms = (time.perf_counter() - fetch_start) * 1000
+
+    lines = playlist_media.split('\n')
+    new_lines = lines[template.line_count:]
+
+    def can_write():
+        return (not cued_out
+                and (not start_time or stream_time >= start_time)
+                and (not end_time or stream_time <= end_time))
+
+    for line in new_lines:
+
+        #EMPTY
+        if not line:
+            continue
+
+        #ENDLIST
+        elif line.startswith("#EXT-X-ENDLIST"):
+                    rewritten.append(line)
+
+        #GAME ENDED
+        elif end_time and stream_time and stream_time > end_time:
+            rewritten.append("#EXT-X-ENDLIST")
+            break
+
+        #KEY
+        elif line.startswith("#EXT-X-KEY:"):
+            last_key = line
+            rewritten.append(uri_search_and_replace(line, base_url))
+
+        #DATE TIME
+        elif line.startswith("#EXT-X-PROGRAM-DATE-TIME:"):
+            ts = line.split(":", 1)[1]
+            stream_time = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+
+            if can_write():
+                rewritten.append(line)
+
+        #EXTINF
+        elif line.startswith("#EXTINF:"):
+
+            try:
+                duration = float(line[len("#EXTINF:"):].split(",")[0])
+            except ValueError as err:
+                logger.error(f"failed to parse EXTINF duration: {line}\n{err}")
+                raise
+
+            segment_start_time = stream_time
+
+            if stream_time is not None:
+                stream_time = stream_time + timedelta(seconds=duration)
+
+            if cued_out:
+                ad_elapsed += duration
+
+            if can_write():
+
+                if not started_segments and segment_start_time is not None:
+                    started_segments = True
+                    last_line = rewritten[-1] if rewritten else None
+                    if not (last_line and last_line.startswith("#EXT-X-PROGRAM-DATE-TIME:")):
+                        rewritten.append(format_program_date_time(segment_start_time))
+
+                rewritten.append(line)
+
+        # GAME NOT STARTED
+        elif start_time and stream_time and stream_time < start_time:
+            continue
+
+        # AD CUES 
+        elif line.startswith("#EXT-X-CUE-IN"):
+
+            if not cued_out:
+                logger.warning(f"received unexpected #EXT-X-CUE-IN for {stream}/{name}")
+
+            cued_out = False
+            logger.debug(f"received CUE-IN for stream {stream}/{name}\nexpected ad duration: {expected_ad_duration}\nad elapsed: {ad_elapsed}")
+
+            if abs(ad_elapsed - expected_ad_duration) > 1:
+                logger.warning(f"mismatch between expected ad duration ({expected_ad_duration}) and actual ad elapsed ({ad_elapsed}) for stream {stream}/{name}")
+
+            if ad_elapsed > 0:
+                ad_pts = await probe_last_segment_end_pts(stream,last_segment, last_key)
+                rewritten.extend(all_filler_no_killer(base_url,
+                                                      playlist,
+                                                      expected_ad_duration,
+                                                      ad_elapsed,
+                                                      ad_pts,
+                                                      last_key,
+                                                      finished = True))
+
+            ad_elapsed = 0.0
+            expected_ad_duration = 0.0
+
+        elif line.startswith("#EXT-X-CUE-OUT:"):
+            if cued_out:
+                logger.warning(f"received unexpected #EXT-X-CUE-OUT for {stream}/{name}")
+
+            cued_out = True
+
+            ad_elapsed = 0.0
+            try:
+                expected_ad_duration = float(line.split(":", 1)[1])
+            except ValueError as err:
+                logger.error(f"failed to parse CUE-OUT duration for {stream}/{name}: {line}\n{err}")
+                expected_ad_duration = 0.0
+                raise
+
+        # AD SKIP
+        elif cued_out:
+            continue
+
+        # SEGMENTS
+        elif line.endswith(".ts") or line.endswith(".aac") or line.endswith(".vtt"):
+            last_segment = line
+            rewritten.append(base_url + line)
+
+        elif not line.startswith('#'):
+            rewritten.append(base_url + line)
+            logger.warning(f"unknown segment: {line} for {stream}/{name}")
+
+        elif "URI=" in line:
+            rewritten.append(uri_search_and_replace(line, base_url))
+            logger.warning(f"unknown URI segment: {line} for {stream}/{name}")
+
+        # MISC
+
+        elif (line.startswith("#EXTM3U")
+                or line.startswith("#EXTINF:")
+                or line.startswith("#EXT-X-VERSION:")
+                or line.startswith("#EXT-X-TARGETDURATION:")
+                or line.startswith("#EXT-X-MEDIA-SEQUENCE:")
+                or line.startswith("#EXT-X-PROGRAM-DATE-TIME")
+                or line.startswith("#EXT-X-PLAYLIST-TYPE:")):
+            
+            rewritten.append(line)
+
+        # GARBAGE
+        elif (line.startswith("#EXT-X-CUE-OUT-CONT:")
+                or line.startswith("#EXT-OATCLS-SCTE35")):
+            pass
+
+        # CATCHALL
+        else:
+            logger.warning(f"keeping unknown line: {line} for {stream}/{name}")
+            rewritten.append(line)
+
+    # PRINT OUT END AD
+    if cued_out and ad_elapsed > 0:
+        ad_pts = await probe_last_segment_end_pts(stream,last_segment, last_key)
+        rewritten.extend(all_filler_no_killer(base_url,
+                                                playlist,
+                                                expected_ad_duration,
+                                                ad_elapsed,
+                                                ad_pts,
+                                                last_key,
+                                                finished = False))
+
+    # cache with this rendition's id swapped back out for the placeholder,
+    # so the next rendition to ask (possibly a different one) can drop its
+    # own id in rather than inheriting this one's segment paths
+    cache_lines = [line.replace(rendition_id, RENDITION_PLACEHOLDER) for line in rewritten]
+    stream.set_template(len(lines), cache_lines, cued_out, stream_time, started_segments)
+
+    elapsed_ms = (time.perf_counter() - func_start) * 1000
+    logger.info(f"rewrote fill playlist in {elapsed_ms:.2f}ms (upstream fetch {fetch_ms:.2f}ms), {len(new_lines)} new lines processed, {len(rewritten)} total lines")
     return '\n'.join(rewritten)
 
 
@@ -492,8 +683,62 @@ async def fill_playlist_ads(stream:Stream, playlist:Playlist, lines:list, base_u
     logger.info(f"rewrote fill playlist in {elapsed_ms:.2f}ms, {len(lines)} lines reduced to {len(rewritten)}")
     return '\n'.join(rewritten)
 
-        
-def all_filler_no_killer(own_base:str, playlist:Playlist, stream_time, expected_seconds:float, elapsed_seconds:float, starting_timestamp=None, key:str=None, finished:bool=False):
+
+async def probe_last_segment_end_pts(stream, last_segment, last_key):
+    """Decrypts the most recent real segment and returns its true embedded
+    end-PTS -- used to anchor filler segments' timestamps to wherever real
+    content actually left off, rather than trusting EXTINF-summed time
+    (which we've measured drifts from the real encoder's PTS over a long
+    broadcast). last_segment/last_key are the raw, upstream-relative forms
+    fill_playlist_ads already tracks -- exactly the form stream.get_segment()
+    needs to reach MLB's own CDN. Returns None if there's nothing to probe
+    yet, or if decrypting/probing fails, so one bad segment doesn't take
+    down the whole playlist rewrite.
+    """
+    if last_segment is None or last_key is None:
+        logger.warning(f"probe_last_segment_end_pts called with no preceding real segment/key seen for {stream}")
+        return None
+
+    key_uri_match = URI_PATTERN.search(last_key)
+    iv_match = IV_PATTERN.search(last_key)
+    if not key_uri_match or not iv_match:
+        logger.warning(f"couldn't find key URI/IV in {last_key!r}, cannot probe end timestamp in {stream}")
+        return None
+
+    key_uri_path = key_uri_match.group(1)
+    iv_bytes = bytes.fromhex(iv_match.group(1))
+
+    try:
+        key_bytes, ciphertext = await asyncio.gather(
+            stream.get_segment(key_uri_path),
+            stream.get_segment(last_segment),
+        )
+
+        decryptor = Cipher(algorithms.AES(key_bytes), modes.CBC(iv_bytes)).decryptor()
+        padded = decryptor.update(ciphertext) + decryptor.finalize()
+        unpadder = sym_padding.PKCS7(128).unpadder()
+        plaintext = unpadder.update(padded) + unpadder.finalize()
+
+        fd, tmp_path = tempfile.mkstemp(suffix=".ts")
+        try:
+            with os.fdopen(fd, "wb") as f:
+                f.write(plaintext)
+            return await asyncio.to_thread(gfs.probe_end_timestamp, tmp_path)
+        finally:
+            os.remove(tmp_path)
+    except Exception as err:
+        logger.warning(f"failed to decrypt/probe end timestamp for {last_segment} in {stream}: {err}")
+        return None
+
+
+
+def all_filler_no_killer(own_base:str,
+                         playlist:Playlist,
+                         expected_seconds:float,
+                         elapsed_seconds:float,
+                         starting_timestamp=None,
+                         key:str=None,
+                         finished:bool=False):
     """Build a complete, self-contained filler ad break of the given duration.
 
     Unlike rewrite_live_playlist2 (which swaps filler in for specific real ad
