@@ -13,7 +13,7 @@ import baseball_pipe.webpage_gen.game_page
 import baseball_pipe.server.router
 import baseball_pipe.webpage_gen.broadcast_page2
 import baseball_pipe.mlbtv.account2
-import baseball_pipe.playlist.generate_filler_segments as gfs
+import baseball_pipe.playlist.filler as gfs
 
 AT = " @ "
 SPC = "&nbsp;"
@@ -28,6 +28,7 @@ async def auth_middleware(request, handler):
     if (request.method == "OPTIONS"
         or path == "/login"
         or path == "/favicon.ico"
+        or path == "/robots.txt"
         or path.startswith("/static")
         or path.endswith((".m3u8", ".ts", ".aac", ".key", ".vtt"))):
 
@@ -89,6 +90,7 @@ class WebServer:
         self.app.router.add_route("OPTIONS", "/{tail:.*}", baseball_pipe.server.router.serve_options)
 
         self.app.router.add_get("/favicon.ico", baseball_pipe.server.router.serve_favicon)
+        self.app.router.add_get("/robots.txt", baseball_pipe.server.router.serve_robots)
         self.app.router.add_get("/johnnysucks", baseball_pipe.server.router.serve_johnnysucks)
 
         # Named keyword routes

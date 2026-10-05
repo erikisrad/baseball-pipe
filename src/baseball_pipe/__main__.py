@@ -12,9 +12,10 @@ stdout_handler = logging.StreamHandler(sys.stdout)
 stdout_handler.setLevel(logging.INFO)
 file_handler = logging.FileHandler(filename=log_file_path, mode='w')
 
-logging.basicConfig(handlers=[stdout_handler, file_handler], 
+logging.basicConfig(handlers=[stdout_handler, file_handler],
                     encoding='utf-8',
-                    format='%(levelname)s:%(message)s',
+                    format='%(asctime)s.%(msecs)03d %(levelname)s:%(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S',
                     level=logging.DEBUG)
 
 logger = logging.getLogger(__name__)

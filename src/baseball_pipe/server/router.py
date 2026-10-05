@@ -57,6 +57,9 @@ async def route_media(request: web.Request):
 async def serve_favicon(request: web.Request):
     return web.FileResponse(os.path.join(STATIC_DIR, "favicon.ico"))
 
+async def serve_robots(request: web.Request):
+    return web.Response(text="User-agent: *\nDisallow: /\n", content_type="text/plain")
+
 async def serve_johnnysucks(request: web.Request):
     return web.Response(text="fuck johnny")
 

@@ -8,7 +8,7 @@ from aiohttp import web
 from baseball_pipe.mlbtv.stream import Stream
 from baseball_pipe.misc.header_handler import cors_headers
 from baseball_pipe.playlist.stream_mangler import prefix_master_urls, rewrite_media_playlist
-from baseball_pipe.playlist import generate_filler_segments as gfs
+from baseball_pipe.playlist import filler as gfs
 
 logger = logging.getLogger(__name__)
 
@@ -20,13 +20,19 @@ SEGMENT_CONTENT_TYPES = {
 }
 
 async def serve_master_playlist(request: web.Request, stream: Stream):
+    func_start = time.perf_counter()
     gamePK = request.match_info.get("gamePK")
     mediaId = request.match_info.get("mediaId")
 
+    fetch_start = time.perf_counter()
     playlist = await stream.get_master_playlist()
+    fetch_ms = (time.perf_counter() - fetch_start) * 1000
 
     own_base = f"{request.url.origin()}/{gamePK}/{mediaId}/"
     playlist = prefix_master_urls(playlist, own_base)
+
+    elapsed_ms = (time.perf_counter() - func_start) * 1000
+    logger.info(f"rewrote master playlist in {elapsed_ms:.2f}ms (upstream fetch {fetch_ms:.2f}ms), {len(playlist.splitlines())} total lines")
 
     return web.Response(text=playlist, headers=cors_headers("application/vnd.apple.mpegurl"))
 

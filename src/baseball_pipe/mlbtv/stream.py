@@ -6,7 +6,7 @@ from baseball_pipe.mlbtv.token import Token
 
 from baseball_pipe.misc import utilities as u
 from baseball_pipe.misc import header_handler as e
-from baseball_pipe.playlist import generate_filler_segments as gfs
+from baseball_pipe.playlist import filler as gfs
 from baseball_pipe.mlbtv import media_playlist
 import aiohttp
 from dataclasses import dataclass
@@ -28,7 +28,8 @@ class StreamTemplate():
     expected_ad_duration:float
     last_key:str
     last_segment:str
-
+    filler_lines:list[str]
+    filler_elapsed:float
 
 class Stream():
 
@@ -55,18 +56,7 @@ class Stream():
     def reset(self):
 
         self._start = None
-        self._end = None
         self._playlist_type = None
-
-        self.template = StreamTemplate(line_count=0,
-                                       playlist=[],
-                                       cued_out=False,
-                                       stream_time=None,
-                                       started_segments=False,
-                                       ad_elapsed=0.0,
-                                       expected_ad_duration=0.0,
-                                       last_key=None,
-                                       last_segment=None)
 
         # via _gen_session()
         self._device_id = ""
@@ -90,22 +80,6 @@ class Stream():
         return f"{self.game_pk}/{self.media_id}"
     
     # GETS /SETS
-    def get_template(self):
-        return self.template
-
-    def set_template(self, line_count, playlist, cued_out, stream_time, started_segments, ad_elapsed=0.0, expected_ad_duration=0.0, key_line=None, last_segment=None):
-        self.template.line_count = line_count
-        self.template.playlist = playlist
-
-        self.template.cued_out = cued_out
-        self.template.stream_time = stream_time
-        self.template.started_segments = started_segments
-
-        self.template.ad_elapsed = ad_elapsed
-        self.template.expected_ad_duration = expected_ad_duration
-        self.template.last_key = key_line
-        self.template.last_segment = last_segment
-
     def get_playlist_type(self):
         return self._playlist_type
 
@@ -147,10 +121,6 @@ class Stream():
             self._start, self._end = await baseball_pipe.mlb.mlb_stats.get_game_start_end_times(self.game_pk, self.session)
         return self._start
 
-    async def get_end(self):
-        if not self._end:
-            self._start, self._end = await baseball_pipe.mlb.mlb_stats.get_game_start_end_times(self.game_pk, self.session)
-        return self._end
 
     @staticmethod
     def _parse_expiration(expiration: str) -> datetime:
@@ -352,6 +322,12 @@ class Stream():
         if not self._master_playlist:
             await self._gen_master_playlist()
 
+        def fresh_template():
+            return StreamTemplate(line_count=0, playlist=[], cued_out=False, stream_time=None,
+                                started_segments=False, ad_elapsed=0.0, expected_ad_duration=0.0,
+                                last_key=None, last_segment=None, filler_lines=[], filler_elapsed=0.0)
+        
+        video_template = fresh_template()
         self._variants = {}
 
         try:
@@ -374,7 +350,7 @@ class Stream():
                     # segments (they share one intermediate TMP_PNG file) --
                     # called synchronously here instead until that race is
                     # fixed with proper per-rendition locking.
-                    self._variants[name] = media_playlist.Playlist(self, name, media_dict)
+                    self._variants[name] = media_playlist.Playlist(self, name, media_dict, video_template)
 
                 elif line.startswith("#EXT-X-MEDIA:") and "URI=" in line:
                     line = line.split(":", 1)[1]
@@ -382,7 +358,7 @@ class Stream():
                     media_dict = {k.lower(): v.strip('"') for k, v in pairs}
 
                     name = media_dict.pop("uri")
-                    self._variants[name] = media_playlist.Playlist(self, name, media_dict)
+                    self._variants[name] = media_playlist.Playlist(self, name, media_dict, fresh_template())
 
         except Exception as err:
             logger.error(f"failed parsing variants for {self._master_playlist_url}: {err}")

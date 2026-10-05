@@ -2,10 +2,10 @@ import logging
 from typing import TYPE_CHECKING
 
 from baseball_pipe.misc import header_handler as e
-from baseball_pipe.playlist import generate_filler_segments as gfs
+from baseball_pipe.playlist import filler as gfs
 
 if TYPE_CHECKING:
-    from baseball_pipe.mlbtv.stream import Stream
+    from baseball_pipe.mlbtv.stream import Stream, StreamTemplate
 
 #VIDEO KINDA KEYS
 BANDWIDTH = "bandwidth"
@@ -33,12 +33,13 @@ logger = logging.getLogger(__name__)
 
 class Playlist():
 
-    def __init__(self, stream: "Stream", name: str, media_dict:dict):
+    def __init__(self, stream: "Stream", name: str, media_dict:dict, template:"StreamTemplate"):
         self.parent_stream = stream
         self.name = name
         self.mdict = media_dict
-        self._media = None
+        self.template = template
 
+        self._media = None
         self.type = None
         self.resolution = None
         self.frame_rate = None
@@ -61,6 +62,13 @@ class Playlist():
 
     def __repr__(self):
         return f"{self.parent_stream}/{self.name}"
+
+    def get_template(self):
+        return self.template
+
+    def overwrite_template(self, template: "StreamTemplate"):
+        if template.line_count > self.template.line_count:
+            self.template = template
 
     def get_name(self):
         return self.name

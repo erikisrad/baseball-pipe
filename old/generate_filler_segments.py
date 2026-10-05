@@ -47,7 +47,8 @@ TMP_VIDEO_TS = os.path.join(tempfile.gettempdir(), "_filler_video_tmp.ts")
 # than living alongside per-rendition output under OUTPUT_DIR
 SILENT_AUDIO_PATH = os.path.join(OUTPUT_DIR, "silent_audio.aac")
 
-MAX_SECONDS = 150  # observed ad breaks run ~120s; pad for safety
+MAX_SECONDS = 245  # observed ad breaks run ~120s; pad for safety
+OVERFLOW_SECONDS = 121
 TAG_TEXT = "BaseballPipe, By Erik R"
 
 # CBR target is derived per-rendition from that rendition's own real
@@ -136,12 +137,21 @@ def ntsc_fraction_str(fps_decimal, tolerance=0.001):
 
 def rendition_dir(size, fps):
     """Build the assets/filler/<resolution>/<framerate>/ directory for a rendition."""
-    w, h = size
     # fps arrives as a fraction string (e.g. "30000/1001") so the exact NTSC
     # rate survives -- Fraction parses that natively, then we round to a
-    # human-readable decimal purely for the folder name
+    # human-readable decimal purely for the folder name))
+
+    rendition_rel_dir = rendition_str(size, fps)
+    return os.path.join(OUTPUT_DIR, rendition_rel_dir)
+
+def rendition_str(size, fps):
+    # a URL fragment, not a filesystem path -- always forward-slash
+    # regardless of OS (os.path.join here would use os.sep, producing a
+    # literal backslash on Windows that breaks the URL it gets embedded in)
+    w, h = size
     fps_value = float(Fraction(fps))
-    return os.path.join(OUTPUT_DIR, f"{w}x{h}", f"{fps_value:.2f}fps")
+
+    return f"{w}x{h}/{fps_value:.2f}fps"
 
 def rendition_exists(size, fps, max_length=MAX_SECONDS):
     """Check whether a rendition's filler segments are on disk up to max_length seconds.
@@ -554,7 +564,7 @@ def generate_rendition(size, fps, bitrate_bps, profile, level_idc):
     # timestamps must continue in that order, not by filename/index
     logger.info(f"generating filler segments for {size[0]}x{size[1]} @ {fps}fps into {output_dir} "
                 f"({bitrate_bps}bps, profile={profile}, level={level_idc})")
-    for seconds_remaining in range(MAX_SECONDS, -121, -1):
+    for seconds_remaining in range(MAX_SECONDS, -OVERFLOW_SECONDS, -1):
         ts_path = os.path.join(output_dir, f"filler_{seconds_remaining:03d}.ts")
 
         frame = make_filler_frame(seconds_remaining, size)
