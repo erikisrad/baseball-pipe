@@ -15,3 +15,7 @@ sudo chmod 600 /etc/baseball-pipe.env
 	
 sudo apt update
 sudo apt install ffmpeg -y
+
+sudo tcpdump -i any host 70.176.110.245 and port 443 \
+  -C 100 -W 10 \
+  -w /tmp/logs/chromecast_capture.pcap

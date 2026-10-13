@@ -39,6 +39,10 @@ async def route_media(request: web.Request):
     # filler segments are served straight from local disk, not proxied
     # through the upstream MLB stream, so this needs to short-circuit before
     # any of the stream/upstream-fetching logic below
+    if path.startswith("filler/audio/"):
+        return await media_handler.serve_filler_audio(request, path)
+    if path.startswith("filler/subtitle/"):
+        return await media_handler.serve_filler_subtitle(request, path)
     if path.startswith("filler/"):
         return await media_handler.serve_filler_segment(request, path)
 

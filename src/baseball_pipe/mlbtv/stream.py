@@ -30,6 +30,7 @@ class StreamTemplate():
     last_segment:str
     filler_lines:list[str]
     filler_elapsed:float
+    header:str
 
 class Stream():
 
@@ -56,7 +57,7 @@ class Stream():
     def reset(self):
 
         self._start = None
-        self._playlist_type = None
+        self._live_status = None
 
         # via _gen_session()
         self._device_id = ""
@@ -80,14 +81,14 @@ class Stream():
         return f"{self.game_pk}/{self.media_id}"
     
     # GETS /SETS
-    def get_playlist_type(self):
-        return self._playlist_type
+    def get_live_status(self):
+        return self._live_status
 
-    def set_playlist_type(self, playlist_type):
+    def set_live_status(self, playlist_type):
         playlist_type = playlist_type.lower()
         if playlist_type not in ["vod", "live", "event"]:
             raise ValueError(f"invalid playlist type: {playlist_type}")
-        self._playlist_type = playlist_type
+        self._live_status = playlist_type
 
     async def get_master_playlist_url(self):
         if not self._master_playlist_url:
@@ -302,11 +303,17 @@ class Stream():
             "Upgrade-Insecure-Requests": "1",
         }
 
+        async def _fetch():
+            async with self.session.get(self._master_playlist_url, headers=headers, proxy=self.proxy, ssl=False) as res:
+                logger.debug(f"got response headers for {self._master_playlist_url}: status={res.status}")
+                if res.status != 200:
+                    raise Exception(f"Failed master playlist request: {res.status} {res.reason}")
+                text = await res.text()
+                logger.debug(f"finished reading {len(text)} chars for {self._master_playlist_url}")
+                return text
+
         logger.info(f"sending master playlist request to {self._master_playlist_url}")
-        async with self.session.get(self._master_playlist_url, headers=headers, proxy=self.proxy, ssl=False) as res:
-            if res.status != 200:
-                raise Exception(f"Failed master playlist request: {res.status} {res.reason}")
-            res_text = await res.text()
+        res_text = await u.with_timeout(_fetch(), 20, f"master playlist request to {self._master_playlist_url}")
 
         self._master_playlist = res_text
         try:
@@ -325,7 +332,7 @@ class Stream():
         def fresh_template():
             return StreamTemplate(line_count=0, playlist=[], cued_out=False, stream_time=None,
                                 started_segments=False, ad_elapsed=0.0, expected_ad_duration=0.0,
-                                last_key=None, last_segment=None, filler_lines=[], filler_elapsed=0.0)
+                                last_key=None, last_segment=None, filler_lines=[], filler_elapsed=0.0, header=None)
         
         video_template = fresh_template()
         self._variants = {}
@@ -333,31 +340,27 @@ class Stream():
         try:
             lines = iter(self._master_playlist.splitlines())
             for line in lines:
-                if line.startswith("#EXT-X-STREAM-INF:"):
+
+                if line.startswith("#EXT-X-STREAM-INF:") and media_playlist.FRAME_RATE.upper() in line:
                     line = line.split(":", 1)[1]
                     pairs = re.findall(r'([A-Z0-9-]+)=("[^"]*"|[^,]+)', line)
                     media_dict = {k.lower(): v.strip('"') for k, v in pairs}
 
                     next_line = next(lines)
                     name = next_line.rsplit('/', 1)[-1]
-                    # Playlist.__init__ can synchronously trigger a full
-                    # filler-library generation run (ensure_rendition ->
-                    # generate_rendition -> up to ~271 blocking ffmpeg
-                    # encodes) the first time a resolution/fps is seen.
-                    # Running that via asyncio.to_thread let two concurrent
-                    # requests for the same never-yet-generated rendition
-                    # race into generate_rendition() at once, corrupting
-                    # segments (they share one intermediate TMP_PNG file) --
-                    # called synchronously here instead until that race is
-                    # fixed with proper per-rendition locking.
                     self._variants[name] = media_playlist.Playlist(self, name, media_dict, video_template)
 
-                elif line.startswith("#EXT-X-MEDIA:") and "URI=" in line:
+                elif (line.startswith("#EXT-X-MEDIA:") and "URI=" in line) or (line.startswith("#EXT-X-STREAM-INF:") and "mp4" in line):
                     line = line.split(":", 1)[1]
                     pairs = re.findall(r'([A-Z0-9-]+)=("[^"]*"|[^,]+)', line)
                     media_dict = {k.lower(): v.strip('"') for k, v in pairs}
 
-                    name = media_dict.pop("uri")
+                    if "uri" in media_dict:
+                        name = media_dict.pop("uri")
+                    else:
+                        next_line = next(lines)
+                        name = next_line.rsplit('/', 1)[-1]
+
                     self._variants[name] = media_playlist.Playlist(self, name, media_dict, fresh_template())
 
         except Exception as err:
@@ -379,8 +382,14 @@ class Stream():
             "Sec-Fetch-Site": "same-origin",
         }
 
-        logger.info(f"sending segment request to {target}")
-        async with self.session.get(target, headers=headers, proxy=self.proxy, ssl=False) as res:
-            if res.status != 200:
-                raise Exception(f"Failed segment request: {res.status} {res.reason}")
-            return await res.read()
+        async def _fetch():
+            async with self.session.get(target, headers=headers, proxy=self.proxy, ssl=False) as res:
+                logger.debug(f"got response headers for {target}: status={res.status}")
+                if res.status != 200:
+                    raise Exception(f"Failed segment request: {res.status} {res.reason}")
+                data = await res.read()
+                logger.debug(f"finished reading {len(data)} bytes for {target}")
+                return data
+
+        logger.debug(f"sending segment request to {target}")
+        return await u.with_timeout(_fetch(), 45, f"segment request to {target}")

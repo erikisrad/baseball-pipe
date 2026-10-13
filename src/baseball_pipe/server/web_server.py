@@ -62,8 +62,18 @@ class WebServer:
         await setup_remotes(app, XForwardedRelaxed())
         app.middlewares.append(auth_middleware)
 
-        self.master_session = aiohttp.ClientSession()
-        self.auth_session = AsyncSession()
+        # aiohttp's own default (total=300, sock_connect=30, sock_read=None)
+        # leaves sock_read unbounded -- a connection that's accepted but then
+        # silently produces nothing (seen going through the Bright Data
+        # proxy) can hang well past any sane request lifetime. Bound all
+        # three explicitly so every request using this session -- stats API,
+        # media-gateway, playlists, segments -- fails fast instead of hanging.
+        self.master_session = aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=60, sock_connect=10, sock_read=30)
+        )
+        # curl_cffi's AsyncSession already defaults timeout=30 internally --
+        # made explicit here so it's not relying on an invisible library default.
+        self.auth_session = AsyncSession(timeout=30)
 
         self.mlbtv_account = baseball_pipe.mlbtv.account2.Account(self.master_session, self.auth_session, proxy=self.proxy_url)
         await self.mlbtv_account._gen_token()

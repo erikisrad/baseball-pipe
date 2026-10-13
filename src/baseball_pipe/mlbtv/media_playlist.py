@@ -1,7 +1,9 @@
+import dataclasses
 import logging
 from typing import TYPE_CHECKING
 
 from baseball_pipe.misc import header_handler as e
+from baseball_pipe.misc import utilities as u
 from baseball_pipe.playlist import filler as gfs
 
 if TYPE_CHECKING:
@@ -28,6 +30,8 @@ FORCED = "forced"
 
 #OTHER
 VIDEO = "VIDEO"
+AUDIO = "AUDIO"
+SUBS = "SUBTITLES"
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +61,20 @@ class Playlist():
                 logger.error(f"failed generating filler segments for {self.parent_stream._master_playlist_url} / {name}: {err}")
                 raise
 
+        elif CODECS in self.mdict and self.mdict[CODECS].startswith("mp4") or TYPE in self.mdict and self.mdict[TYPE] == AUDIO:
+            try:
+                self.type = AUDIO
+                gfs.ensure_silent_audio()
+            except Exception as err:
+                logger.error(f"failed generating audio filler segments for {self.parent_stream._master_playlist_url} / {name}: {err}")
+                raise
+
+        elif TYPE in self.mdict and self.mdict[TYPE] == SUBS:
+            self.type = SUBS
+
+        else:
+            raise Exception(f"unknown playlist type for {self.parent_stream._master_playlist_url} / {name}")
+
     def __str__(self):
         return f"{self.parent_stream}/{self.name}"
 
@@ -68,7 +86,8 @@ class Playlist():
 
     def overwrite_template(self, template: "StreamTemplate"):
         if template.line_count > self.template.line_count:
-            self.template = template
+            for field in dataclasses.fields(self.template):
+                setattr(self.template, field.name, getattr(template, field.name))
 
     def get_name(self):
         return self.name
@@ -96,11 +115,17 @@ class Playlist():
             "Sec-Fetch-Site": "same-origin"
         }
 
+        async def _fetch():
+            async with self.parent_stream.session.get(target, headers=headers, proxy=self.parent_stream.proxy, ssl=False) as res:
+                logger.debug(f"got response headers for {target}: status={res.status}")
+                if res.status != 200:
+                    raise Exception(f"Failed media playlist request: {res.status} {res.reason}")
+                text = await res.text()
+                logger.debug(f"finished reading {len(text)} chars for {target}")
+                return text
+
         logger.info(f"sending media playlist request to {target}")
-        async with self.parent_stream.session.get(target, headers=headers, proxy=self.parent_stream.proxy, ssl=False) as res:
-            if res.status != 200:
-                raise Exception(f"Failed media playlist request: {res.status} {res.reason}")
-            res_text = await res.text()
+        res_text = await u.with_timeout(_fetch(), 20, f"media playlist request to {target}")
 
         try:
             assert "#EXTM3U" in res_text

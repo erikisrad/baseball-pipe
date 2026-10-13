@@ -20,7 +20,7 @@ SILENT_AUDIO_PATH = os.path.join(OUTPUT_DIR, "silent_audio.aac")
 
 MAX_SECONDS = 248
 OVERFLOW_SECONDS = 121
-TAG_TEXT = "BaseballPipe, By Erik R"
+TAG_TEXT = "BaseballPipe, by Erik R."
 AUDIO_SAMPLE_RATE = 48000
 SEC_DURATION = 4
 FILLER_BITRATE_HEADROOM = 0.8
@@ -121,13 +121,12 @@ def make_filler_frame(seconds_remaining, size):
     return img
 
 
-AUDIO_PACKET_SAMPLES = 1024
-
-
 def video_segment_seconds(fps, sec_duration=SEC_DURATION):
     fps_value = Fraction(fps)
     return Fraction(round(float(fps_value)) * sec_duration) / fps_value
 
+AUDIO_PACKET_SAMPLES = 1024
+AUDIO_REFERENCE_FPS = "30000/1001"  # segments are 4.004s at 29.97 and 59.94fps
 
 def audio_packet_count(countdown_start_number, fps, sec_duration=SEC_DURATION):
     k = (MAX_SECONDS - countdown_start_number) // sec_duration
@@ -263,6 +262,38 @@ def probe_end_timestamp(ts_path):
             ends.append(float(parts[0]) + float(parts[1]))
     return max(ends)
 
+ID3_TIMESTAMP_OWNER = b"com.apple.streaming.transportStreamTimestamp\x00"
+
+def read_audio_id3_timestamp(data):
+    if data[:3] != b"ID3":
+        return None
+    size = (data[6] << 21) | (data[7] << 14) | (data[8] << 7) | data[9]
+    tag = data[10:10 + size]
+    i = tag.find(ID3_TIMESTAMP_OWNER)
+    if i < 0:
+        return None
+    start = i + len(ID3_TIMESTAMP_OWNER)
+    return int.from_bytes(tag[start:start + 8], "big") / 90000
+
+def probe_audio_end_timestamp(ts_path):
+    with open(ts_path, "rb") as f:
+        start = read_audio_id3_timestamp(f.read())
+    if start is None:
+        raise ValueError(f"no transport-stream timestamp in ID3 tag: {ts_path}")
+    result = subprocess.run([
+        "ffprobe", "-v", "error",
+        "-select_streams", "a:0",
+        "-show_entries", "packet=pts_time,duration_time",
+        "-of", "csv=p=0",
+        ts_path,
+    ], check=True, capture_output=True, text=True)
+    ends = []
+    for line in result.stdout.splitlines():
+        parts = [p for p in line.rstrip(",").split(",") if p]
+        if len(parts) >= 2:
+            ends.append(float(parts[0]) + float(parts[1]))
+    return start + max(ends)
+
 def rendition_segment_duration(fps, sec_duration=SEC_DURATION):
     """The duration every filler segment declares (EXTINF, tsoffset stepping):
     its video length, frames / fps. Real segments declare their video length
@@ -383,6 +414,11 @@ def ensure_rendition(size, fps, average_bandwidth, codecs, sec_duration=SEC_DURA
     with open(extinf_path) as f:
         return float(f.read().strip())
 
+
+def ensure_silent_audio():
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    counts = {audio_packet_count(c, AUDIO_REFERENCE_FPS) for c in countdown_values()}
+    return {n: ensure_silent_audio_track(n) for n in sorted(counts)}
 
 def ntsc_fraction_str(fps_decimal, tolerance=0.001):
     """Recover the exact NTSC rational rate (e.g. "30000/1001") from a rounded decimal fps.

@@ -49,6 +49,10 @@ async def serve_segment(request: web.Request, stream: Stream, path: str):
     ext = os.path.splitext(path)[1].lower()
     content_type = SEGMENT_CONTENT_TYPES.get(ext, "application/octet-stream")
 
+    range_header = request.headers.get("Range")
+    if range_header:
+        logger.info(f"segment request for {path} from {request.headers.get('User-Agent')} included Range: {range_header}")
+
     data = await stream.get_segment(path)
     return web.Response(body=data, headers=cors_headers(content_type))
 
@@ -81,6 +85,10 @@ def _rewrite_segment_timestamps(file_path, target_offset):
     return _run_ts_remux(file_path, target_offset)
 
 async def serve_filler_segment(request: web.Request, path: str):
+    range_header = request.headers.get("Range")
+    if range_header:
+        logger.info(f"filler segment request for {path} from {request.headers.get('User-Agent')} included Range: {range_header}")
+
     # path is "filler/<resolution>/<framerate>/filler_NNN.ts" -- strip the
     # leading "filler/" so what's left is relative to gfs.OUTPUT_DIR itself
     relative_path = path[len("filler/"):]
@@ -106,7 +114,7 @@ async def serve_filler_segment(request: web.Request, path: str):
             func_start = time.perf_counter()
             data = await asyncio.to_thread(_rewrite_segment_timestamps, file_path, target_offset)
             elapsed_ms = (time.perf_counter() - func_start) * 1000
-            logger.info(f"served filler segment {os.path.basename(file_path)} (tsoffset={target_offset:.6f}) in {elapsed_ms:.2f}ms")
+            logger.debug(f"served filler segment {os.path.basename(file_path)} (tsoffset={target_offset:.6f}) in {elapsed_ms:.2f}ms")
             return web.Response(body=data, headers=cors_headers(content_type))
         except Exception as err:
             logger.warning(f"failed to rewrite timestamps for {file_path} (tsoffset={tsoffset}): {err}")
@@ -114,3 +122,34 @@ async def serve_filler_segment(request: web.Request, path: str):
             # the whole request over a timestamp correction that didn't work
 
     return web.FileResponse(file_path, headers=cors_headers(content_type))
+
+def _synchsafe(n):
+    return bytes([(n >> 21) & 0x7F, (n >> 14) & 0x7F, (n >> 7) & 0x7F, n & 0x7F])
+
+def _id3_timestamp_tag(tsoffset):
+    ticks = round(tsoffset * 90000) % (1 << 33)
+    body = gfs.ID3_TIMESTAMP_OWNER + ticks.to_bytes(8, "big")
+    frame = b"PRIV" + _synchsafe(len(body)) + b"\x00\x00" + body
+    return b"ID3\x04\x00\x00" + _synchsafe(len(frame)) + frame
+
+async def serve_filler_audio(request: web.Request, path: str):
+    relative_path = path[len("filler/audio/"):]
+    file_path = os.path.normpath(os.path.join(gfs.OUTPUT_DIR, relative_path))
+    output_dir = os.path.normpath(gfs.OUTPUT_DIR)
+    if os.path.commonpath([file_path, output_dir]) != output_dir:
+        raise web.HTTPForbidden()
+    if not os.path.isfile(file_path):
+        return web.HTTPNotFound()
+
+    with open(file_path, "rb") as f:
+        body = f.read()
+
+    tsoffset = request.query.get("tsoffset")
+    if tsoffset is not None:
+        body = _id3_timestamp_tag(float(tsoffset)) + body
+    return web.Response(body=body, headers=cors_headers("audio/aac"))
+
+async def serve_filler_subtitle(request: web.Request, path: str):
+    mpegts = request.query.get("tsoffset", "0")
+    body = f"WEBVTT\nX-TIMESTAMP-MAP=LOCAL:00:00:00.000,MPEGTS:{mpegts}\n\n"
+    return web.Response(text=body, headers=cors_headers("text/vtt"))
