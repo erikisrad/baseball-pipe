@@ -94,22 +94,22 @@ async def rewrite_media_playlist(stream:Stream, name:str, own_base:str):
 
     if playlist.type == baseball_pipe.mlbtv.media_playlist.VIDEO:
         if stream.get_live_status() == "vod":
-            #return await nuke_playlist_ads(stream, playlist, own_base)
-            return await fill_playlist_ads2(stream, playlist, own_base)
+            return await nuke_playlist_ads(stream, playlist, own_base)
+            #return await fill_playlist_ads2(stream, playlist, own_base)
         else:
             return await fill_playlist_ads2(stream, playlist, own_base)
 
     elif playlist.type == baseball_pipe.mlbtv.media_playlist.AUDIO:
         if stream.get_live_status() == "vod":
-            #return await nuke_playlist_ads(stream, playlist, own_base)
-            return await fill_audio_playlist_ads(stream, playlist, own_base)
+            return await nuke_playlist_ads(stream, playlist, own_base)
+            #return await fill_audio_playlist_ads(stream, playlist, own_base)
         else:
             return await fill_audio_playlist_ads(stream, playlist, own_base)
 
     elif playlist.type == baseball_pipe.mlbtv.media_playlist.SUBS:
         if stream.get_live_status() == "vod":
-            #return await nuke_playlist_ads(stream, playlist, own_base)
-            return await fill_subtitle_playlist_ads(stream, playlist, own_base)
+            return await nuke_playlist_ads(stream, playlist, own_base)
+            #return await fill_subtitle_playlist_ads(stream, playlist, own_base)
         else:
             return await fill_subtitle_playlist_ads(stream, playlist, own_base)
 
@@ -669,7 +669,7 @@ async def fill_playlist_ads2(stream:Stream, playlist:baseball_pipe.mlbtv.media_p
     playlist_media = await playlist.get_media()
 
     fetch_ms = (time.perf_counter() - fetch_start) * 1000
-    logger.info(f"fetched media playlist for {name} in {fetch_ms:.2f}ms")
+    #logger.info(f"fetched media playlist for {name} in {fetch_ms:.2f}ms")
     total_fetch_ms += fetch_ms
     total_fetches += 1
 

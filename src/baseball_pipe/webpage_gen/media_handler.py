@@ -7,6 +7,7 @@ from aiohttp import web
 
 from baseball_pipe.mlbtv.stream import Stream
 from baseball_pipe.misc.header_handler import cors_headers
+from baseball_pipe.misc import utilities as u
 from baseball_pipe.playlist.stream_mangler import prefix_master_urls, rewrite_media_playlist
 from baseball_pipe.playlist import filler as gfs
 
@@ -20,32 +21,33 @@ SEGMENT_CONTENT_TYPES = {
 }
 
 async def serve_master_playlist(request: web.Request, stream: Stream):
-    func_start = time.perf_counter()
+    serve_start = time.perf_counter()
     gamePK = request.match_info.get("gamePK")
     mediaId = request.match_info.get("mediaId")
 
-    fetch_start = time.perf_counter()
     playlist = await stream.get_master_playlist()
-    fetch_ms = (time.perf_counter() - fetch_start) * 1000
-
     own_base = f"{request.url.origin()}/{gamePK}/{mediaId}/"
     playlist = prefix_master_urls(playlist, own_base)
 
-    elapsed_ms = (time.perf_counter() - func_start) * 1000
-    logger.info(f"rewrote master playlist in {elapsed_ms:.2f}ms (upstream fetch {fetch_ms:.2f}ms), {len(playlist.splitlines())} total lines")
+    serve_ms = (time.perf_counter() - serve_start) * 1000
+    logger.info(f"served rewritten master playlist in {serve_ms:.2f}ms, {len(playlist.splitlines())} total lines")
 
     return web.Response(text=playlist, headers=cors_headers("application/vnd.apple.mpegurl"))
 
 async def serve_media_playlist(request: web.Request, stream: Stream, path: str):
+    serve_start = time.perf_counter()
     gamePK = request.match_info.get("gamePK")
     mediaId = request.match_info.get("mediaId")
 
     own_base = f"{request.url.origin()}/{gamePK}/{mediaId}/"
     playlist = await rewrite_media_playlist(stream, path, own_base)
-
+    
+    serve_ms = (time.perf_counter() - serve_start) * 1000
+    logger.info(f"served rewritten media playlist {path} in {serve_ms:.2f}ms, {len(playlist.splitlines())} total lines") 
     return web.Response(text=playlist, headers=cors_headers("application/vnd.apple.mpegurl"))
 
 async def serve_segment(request: web.Request, stream: Stream, path: str):
+    serve_start = time.perf_counter()
     ext = os.path.splitext(path)[1].lower()
     content_type = SEGMENT_CONTENT_TYPES.get(ext, "application/octet-stream")
 
@@ -54,6 +56,8 @@ async def serve_segment(request: web.Request, stream: Stream, path: str):
         logger.info(f"segment request for {path} from {request.headers.get('User-Agent')} included Range: {range_header}")
 
     data = await stream.get_segment(path)
+    serve_ms = (time.perf_counter() - serve_start) * 1000
+    logger.debug(f"served genuine segment {path} in {serve_ms:.2f}ms, {len(data)} bytes")
     return web.Response(body=data, headers=cors_headers(content_type))
 
 def _run_ts_remux(file_path, output_ts_offset):
@@ -85,6 +89,7 @@ def _rewrite_segment_timestamps(file_path, target_offset):
     return _run_ts_remux(file_path, target_offset)
 
 async def serve_filler_segment(request: web.Request, path: str):
+    serve_start = time.perf_counter()
     range_header = request.headers.get("Range")
     if range_header:
         logger.info(f"filler segment request for {path} from {request.headers.get('User-Agent')} included Range: {range_header}")
@@ -111,10 +116,14 @@ async def serve_filler_segment(request: web.Request, path: str):
     if tsoffset is not None:
         try:
             target_offset = float(tsoffset)
-            func_start = time.perf_counter()
-            data = await asyncio.to_thread(_rewrite_segment_timestamps, file_path, target_offset)
-            elapsed_ms = (time.perf_counter() - func_start) * 1000
-            logger.debug(f"served filler segment {os.path.basename(file_path)} (tsoffset={target_offset:.6f}) in {elapsed_ms:.2f}ms")
+
+            data = await u.with_timeout(
+                asyncio.to_thread(_rewrite_segment_timestamps, file_path, target_offset),
+                10,
+                f"filler timestamp rewrite for {file_path}"
+            )
+            serve_ms = (time.perf_counter() - serve_start) * 1000
+            logger.debug(f"served filler segment {os.path.basename(file_path)} (tsoffset={target_offset:.6f}) in {serve_ms:.2f}ms, {len(data)} bytes")
             return web.Response(body=data, headers=cors_headers(content_type))
         except Exception as err:
             logger.warning(f"failed to rewrite timestamps for {file_path} (tsoffset={tsoffset}): {err}")
