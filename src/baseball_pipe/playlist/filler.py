@@ -25,6 +25,32 @@ AUDIO_SAMPLE_RATE = 48000
 SEC_DURATION = 4
 FILLER_BITRATE_HEADROOM = 0.8
 
+# Real MLB segments (confirmed directly via ffprobe on a decrypted live
+# segment -- 849815-ND_192K) use a closed, fixed 2-second GOP with a mixed
+# 1-2 B-frame cadence between references (I,B,B,P,B,P,B,B,P,... -- never
+# more than 2 consecutive B-frames). Filler used to force bframes=0 with no
+# GOP-size control at all, which meant every real<->filler splice point was
+# also a B-frame-structure and keyframe-cadence discontinuity on top of the
+# intentional content cut -- confirmed via a controlled A/B test to be the
+# dominant cause of the Chromecast frame-drop/stutter problem (0 dropped
+# frames over 56+ minutes with discontinuities removed entirely, vs 13,000+
+# with them in place). Matching this structure, not just profile/level,
+# is what actually closes that gap.
+GOP_SECONDS = 2
+
+# Real MLB segments carry fixed PMT/elementary-stream PIDs (confirmed via
+# ffprobe on a decrypted live segment -- 849815-ND_192K): PMT=480 (0x1e0),
+# video=481 (0x1e1, also the PCR PID -- MLB's encoder carries PCR on the
+# video stream itself rather than a separate PID), audio=482 (0x1e2).
+# Filler was muxing with ffmpeg's plain defaults instead (PMT=4096,
+# video=256, audio=257) -- a different PID for "the same" elementary stream
+# across a splice point is a transport-stream-level discontinuity on top of
+# (and independent of) the GOP/B-frame one above, since demuxers generally
+# key a stream's identity off its PID number, not just its codec type.
+PMT_PID = 0x1e0
+VIDEO_PID = 0x1e1
+AUDIO_PID = 0x1e2
+
 H264_PROFILE_NAMES = {
     66: "baseline",
     77: "main",
@@ -160,6 +186,11 @@ def encode_ts(countdown_start_number, ts_path, size, fps, ts_offset, bitrate_bps
     fps_value = float(Fraction(fps))
     video_frames = round(fps_value)  # ~1 second's worth of frames at this fps
     bufsize_bps = bitrate_bps * 2
+    # sec_duration * video_frames (4 * round(fps)) lands on 120 frames for
+    # every rendition tested so far, same as real segments -- GOP_SECONDS=2
+    # then gives exactly 2 closed GOPs per filler segment, matching real
+    # content's own keyframe placement rather than just its frame count.
+    gop_size = round(fps_value * GOP_SECONDS)
     silent_audio_path = ensure_silent_audio_track(audio_packet_count(countdown_start_number, fps, sec_duration))
 
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -180,7 +211,9 @@ def encode_ts(countdown_start_number, ts_path, size, fps, ts_offset, bitrate_bps
             "-c:v", "libx264", "-profile:v", profile, "-level:v", str(level_idc), "-pix_fmt", "yuv420p",
             "-b:v", str(bitrate_bps), "-minrate", str(bitrate_bps), "-maxrate", str(bitrate_bps),
             "-bufsize", str(bufsize_bps),
-            "-x264-params", "nal-hrd=cbr:force-cfr=1:bframes=0",
+            "-x264-params",
+            f"nal-hrd=cbr:force-cfr=1:bframes=2:b-adapt=1:"
+            f"keyint={gop_size}:min-keyint={gop_size}:scenecut=0",
             "-f", "mpegts", TMP_VIDEO_TS,
         ], check=True, capture_output=True)
 
@@ -191,6 +224,9 @@ def encode_ts(countdown_start_number, ts_path, size, fps, ts_offset, bitrate_bps
             "-map", "0:v", "-map", "1:a",
             "-c", "copy",
             "-mpegts_flags", "+resend_headers",
+            "-mpegts_pmt_start_pid", str(PMT_PID),
+            "-streamid", f"0:{VIDEO_PID}",
+            "-streamid", f"1:{AUDIO_PID}",
             "-muxdelay", "0", "-muxpreload", "0",
             "-output_ts_offset", f"{ts_offset:.6f}",
             "-f", "mpegts", ts_path,

@@ -86,6 +86,9 @@ async def serve_broadcast(request):
     #STREAM
     video_url = f"{base_url}/{gamePK}/{mediaId}/master.m3u8"
 
+    #VIDEO OVERRIDE
+    #video_url = "https://baseballpipe.com/849815/654ea42b-9677-43c6-912b-a50a8d9a8b70/849815-ND_192K.m3u8"
+
     error = None
     try:
         stream: Stream = await mlbtv_account.get_stream(gamePK, mediaId)

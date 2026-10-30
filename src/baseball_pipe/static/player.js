@@ -17,6 +17,7 @@ document.addEventListener('DOMContentLoaded', function() {
       plugins: {
          chromecast: {
             addButtonToControlBar: true,
+            receiverAppID: 'DB0F4596',
          }
       }
    };
@@ -29,6 +30,12 @@ document.addEventListener('DOMContentLoaded', function() {
    // is the call that actually flips it on, surfacing granular VHS internals
    // like buffer-stall counts and exclusion reasons leading up to a rendition switch
    player.debug(true);
+
+   // Namespace for the receiver -> sender debug channel wired into
+   // cast-receiver.html -- lets us see what Shaka is actually doing on the
+   // TV without relying on chrome://inspect, which has proven unreliable
+   // against this device's embedded Chromium build.
+   var DEBUG_NAMESPACE = 'urn:x-cast:com.baseballpipe.debug';
 
    player.ready(function() {
       console.log('--- DEBUG: Video.js Ready ---');
@@ -49,6 +56,23 @@ document.addEventListener('DOMContentLoaded', function() {
          console.log('EVENT: Connected to Chromecast! Handing over the URL...');
          // Log the source being sent to the TV
          console.log('SOURCE SHIPPED TO TV:', player.currentSrc());
+
+         // Listen for debug messages pushed back from the receiver
+         // (cast-receiver.html) over our own custom message channel.
+         var castSession = cast.framework.CastContext.getInstance().getCurrentSession();
+         if (castSession) {
+            castSession.addMessageListener(DEBUG_NAMESPACE, function(namespace, message) {
+               // Log the raw JSON string, not a parsed live object -- a
+               // live object only ever prints as an unexpandable "{...}"
+               // in a plain-text console export (the same issue BUFFER
+               // DEBUG hit earlier), which made every HEARTBEAT/event
+               // payload we added unreadable in every exported .log file
+               // so far. The string survives copy/export intact.
+               console.log('RECEIVER DEBUG:', message);
+            });
+         } else {
+            console.warn('DEBUG CHANNEL: no active cast session to attach listener to.');
+         }
       });
 
       player.on('chromecastDisconnected', function() {
@@ -75,6 +99,23 @@ document.addEventListener('DOMContentLoaded', function() {
    window.__onGCastApiAvailable = function(isAvailable) {
       if (isAvailable) {
          console.log('GOOGLE SDK: Cast API is available on the window.');
+
+         // Direct from the raw Cast SDK, bypassing silvermine's abstraction --
+         // tells us whether Google's own framework sees an available receiver
+         // for our configured app ID at all, independent of whether the
+         // plugin decides to show a button for it.
+         // Query it directly too -- the change-event alone may never fire
+         // if the state has been static since page load (change events
+         // typically only fire on an actual transition, not an initial
+         // snapshot), so don't rely on it alone.
+         console.log('CURRENT CAST STATE:', cast.framework.CastContext.getInstance().getCastState());
+
+         cast.framework.CastContext.getInstance().addEventListener(
+            cast.framework.CastContextEventType.CAST_STATE_CHANGED,
+            (event) => {
+               console.log('CAST STATE CHANGED:', event.castState);
+            }
+         );
       } else {
          console.error('GOOGLE SDK: Cast API failed to initialize.');
       }

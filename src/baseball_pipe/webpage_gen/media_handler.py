@@ -71,12 +71,25 @@ def _run_ts_remux(file_path, output_ts_offset):
     frame's worth of unavoidable sample-rate quantization, not artificial
     delay -- so the result can be trusted directly with no separate
     measure-and-correct step needed.
+
+    -mpegts_pmt_start_pid/-streamid force the same PMT/video/audio PIDs
+    filler.py's own encode already bakes in (gfs.PMT_PID/VIDEO_PID/AUDIO_PID,
+    matched to real MLB segments) -- without them, this remux's own mpegts
+    muxer silently reassigns its own default PIDs (PMT=4096, video=256,
+    audio=257) on every single request, since `-c copy` only means "don't
+    re-encode the codec data", not "keep the container's original PIDs".
+    Confirmed directly: a source file with correct PIDs came out of this
+    exact remux with the wrong ones before this was added, which is why the
+    PID fix never actually reached anything served over HTTP.
     """
     result = subprocess.run([
         "ffmpeg", "-y",
         "-i", file_path,
         "-c", "copy",
         "-muxdelay", "0", "-muxpreload", "0",
+        "-mpegts_pmt_start_pid", str(gfs.PMT_PID),
+        "-streamid", f"0:{gfs.VIDEO_PID}",
+        "-streamid", f"1:{gfs.AUDIO_PID}",
         "-output_ts_offset", f"{output_ts_offset:.6f}",
         "-f", "mpegts", "pipe:1",
     ], capture_output=True, check=True)

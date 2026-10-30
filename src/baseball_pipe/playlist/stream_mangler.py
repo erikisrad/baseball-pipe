@@ -22,7 +22,6 @@ logger = logging.getLogger(__name__)
 URI_PATTERN = re.compile(r'URI="([^"]+)"')
 IV_PATTERN = re.compile(r'IV=0[xX]([0-9a-fA-F]+)')
 PLAYLIST_TYPE_PATTERN = re.compile("#EXT-X-PLAYLIST-TYPE:([A-Z]+)")
-CUE_OUT_CONT_PATTERN = re.compile(r'ElapsedTime=([\d.]+),Duration=([\d.]+)')
 AUTOSELECT_PATTERN = re.compile(r'AUTOSELECT=YES')
 DEFAULT_PATTERN = re.compile(r'DEFAULT=YES')
 
@@ -96,6 +95,7 @@ async def rewrite_media_playlist(stream:Stream, name:str, own_base:str):
         if stream.get_live_status() == "vod":
             return await nuke_playlist_ads(stream, playlist, own_base)
             #return await fill_playlist_ads2(stream, playlist, own_base)
+            #return await rewrite_playlist_only(stream, playlist, own_base)
         else:
             return await fill_playlist_ads2(stream, playlist, own_base)
 
@@ -103,6 +103,7 @@ async def rewrite_media_playlist(stream:Stream, name:str, own_base:str):
         if stream.get_live_status() == "vod":
             return await nuke_playlist_ads(stream, playlist, own_base)
             #return await fill_audio_playlist_ads(stream, playlist, own_base)
+            #return await rewrite_playlist_only(stream, playlist, own_base)
         else:
             return await fill_audio_playlist_ads(stream, playlist, own_base)
 
@@ -110,6 +111,7 @@ async def rewrite_media_playlist(stream:Stream, name:str, own_base:str):
         if stream.get_live_status() == "vod":
             return await nuke_playlist_ads(stream, playlist, own_base)
             #return await fill_subtitle_playlist_ads(stream, playlist, own_base)
+            #return await rewrite_playlist_only(stream, playlist, own_base)
         else:
             return await fill_subtitle_playlist_ads(stream, playlist, own_base)
 
@@ -129,7 +131,72 @@ def determine_live_status(lines):
             else:
                 return "live"
 
-            
+
+async def rewrite_playlist_only(stream:Stream, playlist:baseball_pipe.mlbtv.media_playlist.Playlist, base_url:str):
+    """Debug-only pass-through: rewrites segment/key URLs to point through
+    our own proxy and otherwise copies the upstream playlist verbatim -- no
+    ad-cue handling, no filler substitution, and critically no
+    #EXT-X-DISCONTINUITY ever inserted (CUE-OUT/CUE-IN/SCTE35 lines, if
+    present upstream, are passed through untouched rather than converted).
+    Exists to isolate whether a given Shaka/CAF problem is caused or
+    worsened by our own added discontinuities, by giving a real stream with
+    the same segment count but zero period boundaries to compare against.
+    """
+    func_start = time.perf_counter()
+
+    name = playlist.get_name()
+    rendition_id = name.rsplit('.', 1)[0] # "823657-HD_7500K.m3u8" -> "823657-HD_7500K"
+
+    # deep copy, not just a reference -- see fill_playlist_ads2 for why:
+    # stream.get_template() returns the one StreamTemplate shared by every
+    # rendition of this stream, and this function has an `await` below
+    # before it writes back via set_template()
+    template = copy.deepcopy(playlist.get_template())
+    rewritten = [line.replace(RENDITION_PLACEHOLDER, rendition_id) for line in template.playlist]
+
+    fetch_start = time.perf_counter()
+    playlist_media = await playlist.get_media()
+    fetch_ms = (time.perf_counter() - fetch_start) * 1000
+
+    lines = playlist_media.splitlines()
+    new_lines = lines[template.line_count:]
+
+    for line in new_lines:
+
+        #EMPTY
+        if not line:
+            continue
+
+        # SEGMENTS
+        elif line.endswith(".ts") or line.endswith(".aac") or line.endswith(".vtt"):
+            rewritten.append(base_url + line)
+
+        elif "URI=" in line:
+            rewritten.append(uri_search_and_replace(line, base_url))
+
+        elif not line.startswith('#'):
+            rewritten.append(base_url + line)
+            logger.warning(f"unknown segment: {line} for {stream}/{name}")
+
+        # EVERYTHING ELSE -- headers, EXTINF, PROGRAM-DATE-TIME, ENDLIST,
+        # CUE-OUT/CUE-IN/SCTE35, anything else -- copied through verbatim.
+        # No discontinuities are ever inserted here.
+        else:
+            rewritten.append(line)
+
+    # cache with this rendition's id swapped back out for the placeholder,
+    # so the next rendition to ask (possibly a different one) can drop its
+    # own id in rather than inheriting this one's segment paths
+    template.playlist = [line.replace(rendition_id, RENDITION_PLACEHOLDER) for line in rewritten]
+    template.line_count = len(lines)
+    playlist.overwrite_template(template)
+
+    elapsed_ms = (time.perf_counter() - func_start) * 1000
+    logger.info(f"rewrote pass-through playlist in {elapsed_ms:.2f}ms (upstream fetch {fetch_ms:.2f}ms), {len(new_lines)} new lines processed, {len(rewritten)} total lines")
+    return '\n'.join(rewritten)
+
+
+
 async def nuke_playlist_ads(stream:Stream, playlist:baseball_pipe.mlbtv.media_playlist.Playlist, base_url:str):
     func_start = time.perf_counter()
 
@@ -264,12 +331,18 @@ async def nuke_playlist_ads(stream:Stream, playlist:baseball_pipe.mlbtv.media_pl
 
 async def fill_audio_playlist_ads(stream:Stream, playlist:baseball_pipe.mlbtv.media_playlist.Playlist, base_url:str):
     func_start = time.perf_counter()
-    
+
     name = playlist.get_name()
     rendition_id = name.rsplit('.', 1)[0]
 
     template = copy.deepcopy(playlist.get_template())
-    rewritten = template.playlist
+    # swap this rendition's id back IN for the placeholder on read, mirroring
+    # the swap back OUT to the placeholder on write below -- without this,
+    # a repeat poll (new_lines empty, nothing to append) returns the cached
+    # prefix with the literal "{{RENDITION}}" placeholder still in it,
+    # since `rewritten` was never anything but a bare reference to the
+    # already-placeholder'd template.playlist.
+    rewritten = [line.replace(RENDITION_PLACEHOLDER, rendition_id) for line in template.playlist]
 
     start_time = await stream.get_start()
 
@@ -437,10 +510,9 @@ async def fill_audio_playlist_ads(stream:Stream, playlist:baseball_pipe.mlbtv.me
             rewritten.append(line)
 
 
-    # cache with this rendition's id swapped back out for the placeholder,
-    # so the next rendition to ask (possibly a different one) can drop its
-    # own id in rather than inheriting this one's segment paths
-    template.playlist = rewritten
+    # cache with this rendition's id swapped back out for the placeholder --
+    # see the matching swap-in above.
+    template.playlist = [line.replace(rendition_id, RENDITION_PLACEHOLDER) for line in rewritten]
     template.line_count = len(lines)
     playlist.overwrite_template(template)
 
@@ -451,12 +523,18 @@ async def fill_audio_playlist_ads(stream:Stream, playlist:baseball_pipe.mlbtv.me
 
 async def fill_subtitle_playlist_ads(stream:Stream, playlist:baseball_pipe.mlbtv.media_playlist.Playlist, base_url:str):
     func_start = time.perf_counter()
-    
+
     name = playlist.get_name()
     rendition_id = name.rsplit('.', 1)[0]
 
     template = copy.deepcopy(playlist.get_template())
-    rewritten = template.playlist
+    # swap this rendition's id back IN for the placeholder on read, mirroring
+    # the swap back OUT to the placeholder on write below -- without this,
+    # a repeat poll (new_lines empty, nothing to append) returns the cached
+    # prefix with the literal "{{RENDITION}}" placeholder still in it,
+    # since `rewritten` was never anything but a bare reference to the
+    # already-placeholder'd template.playlist.
+    rewritten = [line.replace(RENDITION_PLACEHOLDER, rendition_id) for line in template.playlist]
 
     start_time = await stream.get_start()
 
@@ -626,10 +704,9 @@ async def fill_subtitle_playlist_ads(stream:Stream, playlist:baseball_pipe.mlbtv
             rewritten.append(line)
 
 
-    # cache with this rendition's id swapped back out for the placeholder,
-    # so the next rendition to ask (possibly a different one) can drop its
-    # own id in rather than inheriting this one's segment paths
-    template.playlist = rewritten
+    # cache with this rendition's id swapped back out for the placeholder --
+    # see the matching swap-in above.
+    template.playlist = [line.replace(rendition_id, RENDITION_PLACEHOLDER) for line in rewritten]
     template.line_count = len(lines)
     playlist.overwrite_template(template)
 
@@ -989,12 +1066,19 @@ def all_filler_audio(own_base:str,
     overflow_segments = math.ceil(gfs.OVERFLOW_SECONDS/sec)
 
     lines = []
-    segment_ts = starting_timestamp
+    elapsed = 0.0
     for i in range(total_segments + overflow_segments):
         countdown = first_countdown - i * sec
         packets = gfs.audio_packet_count(countdown, gfs.AUDIO_REFERENCE_FPS, sec)
         duration = packets * gfs.AUDIO_PACKET_SAMPLES / gfs.AUDIO_SAMPLE_RATE
         lines.append(f"#EXTINF:{duration:.6f}")
-        lines.append(f"{own_base}filler/audio/silent_audio_{packets}pk.aac?tsoffset={segment_ts:.6f}")
-        segment_ts += duration
+        segment_url = f"{own_base}filler/audio/silent_audio_{packets}pk.aac"
+        # starting_timestamp is None when probing the last real segment's
+        # end-PTS failed (see probe_last_segment_end_pts) -- there's nothing
+        # to anchor these filler segments' tsoffset to, so omit it rather
+        # than crash formatting None with :.6f.
+        if starting_timestamp is not None:
+            segment_url += f"?tsoffset={starting_timestamp + elapsed:.6f}"
+        lines.append(segment_url)
+        elapsed += duration
     return lines
