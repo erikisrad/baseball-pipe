@@ -55,14 +55,6 @@ class Account():
         self._interaction_code = None
         self._token = None
 
-    async def test(self): # test account's ability to create a stream
-        stream:baseball_pipe.mlbtv.stream.Stream = await self.get_stream("823440", "a85458be-cd51-49c5-94b9-80bc7c0a71e4")
-        master = await stream.get_master_playlist()
-        expired = stream.is_expired()
-
-        logger.info(f"test stream master playlist: {master[:7]}...")
-        logger.info(f"test stream expired: {expired}")
-
     async def get_stream(self, game_pk:str, media_id:str):
         id = f"{game_pk}/{media_id}"
 

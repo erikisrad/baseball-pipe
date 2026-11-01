@@ -36,6 +36,21 @@ FILLER_PLACEHOLDER = "{{FILLER}}"
 DEBUG_DUMP_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "..", "test_files")
 
 
+def _raise_missing_extinf(template, lines, rendition_id, stream, name, line):
+    """A segment line arrived without a preceding EXTINF -- a structural
+    assumption every rewrite function here depends on. Dumps this rendition's
+    cached template and the freshly-fetched upstream lines to DEBUG_DUMP_DIR
+    before raising, so there's enough state on disk to diagnose after the
+    fact. Shared by fill_audio_playlist_ads, fill_subtitle_playlist_ads, and
+    fill_playlist_ads2, which all hit this same check.
+    """
+    with open(os.path.join(DEBUG_DUMP_DIR, f"template_playlist_{rendition_id}.txt"), "w", encoding="utf-8") as f:
+        f.write('\n'.join(template.playlist))
+    with open(os.path.join(DEBUG_DUMP_DIR, f"lines_{rendition_id}.txt"), "w", encoding="utf-8") as f:
+        f.write('\n'.join(lines))
+    raise Exception(f"expected EXTINF before segment {line} for {stream}/{name}")
+
+
 def uri_search_and_replace(line, full_url):
     logger.debug(f"rewriting URL for line {line}")
     old = URI_PATTERN.search(line)
@@ -471,11 +486,7 @@ async def fill_audio_playlist_ads(stream:Stream, playlist:baseball_pipe.mlbtv.me
             template.last_segment = line
 
             if not rewritten[-1].startswith("#EXTINF:"):
-                with open(os.path.join(DEBUG_DUMP_DIR, f"template_playlist_{rendition_id}.txt"), "w", encoding="utf-8") as f:
-                    f.write('\n'.join(template.playlist))
-                with open(os.path.join(DEBUG_DUMP_DIR, f"lines_{rendition_id}.txt"), "w", encoding="utf-8") as f:
-                    f.write('\n'.join(lines))
-                raise Exception(f"expected EXTINF before segment {line} for {stream}/{name}")
+                _raise_missing_extinf(template, lines, rendition_id, stream, name, line)
 
             rewritten.append(base_url + line)
 
@@ -665,11 +676,7 @@ async def fill_subtitle_playlist_ads(stream:Stream, playlist:baseball_pipe.mlbtv
             template.last_segment = line
 
             if not rewritten[-1].startswith("#EXTINF:"):
-                with open(os.path.join(DEBUG_DUMP_DIR, f"template_playlist_{rendition_id}.txt"), "w", encoding="utf-8") as f:
-                    f.write('\n'.join(template.playlist))
-                with open(os.path.join(DEBUG_DUMP_DIR, f"lines_{rendition_id}.txt"), "w", encoding="utf-8") as f:
-                    f.write('\n'.join(lines))
-                raise Exception(f"expected EXTINF before segment {line} for {stream}/{name}")
+                _raise_missing_extinf(template, lines, rendition_id, stream, name, line)
 
             rewritten.append(base_url + line)
 
@@ -879,11 +886,7 @@ async def fill_playlist_ads2(stream:Stream, playlist:baseball_pipe.mlbtv.media_p
             template.last_segment = line
 
             if not rewritten[-1].startswith("#EXTINF:"):
-                with open(os.path.join(DEBUG_DUMP_DIR, f"template_playlist_{rendition_id}.txt"), "w", encoding="utf-8") as f:
-                    f.write('\n'.join(template.playlist))
-                with open(os.path.join(DEBUG_DUMP_DIR, f"lines_{rendition_id}.txt"), "w", encoding="utf-8") as f:
-                    f.write('\n'.join(lines))
-                raise Exception(f"expected EXTINF before segment {line} for {stream}/{name}")
+                _raise_missing_extinf(template, lines, rendition_id, stream, name, line)
 
             rewritten.append(base_url + line)
 

@@ -14,9 +14,7 @@ CROSSBAR_COLOR = (200, 30, 30) #red
 PACKAGE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUTPUT_DIR = os.path.join(PACKAGE_DIR, "assets", "filler")
 FONT_PATH = os.path.join(PACKAGE_DIR, "assets", "fonts", "DejaVuSans.ttf")
-TMP_PNG = os.path.join(tempfile.gettempdir(), "_filler_frame_tmp.png")
 TMP_VIDEO_TS = os.path.join(tempfile.gettempdir(), "_filler_video_tmp.ts")
-SILENT_AUDIO_PATH = os.path.join(OUTPUT_DIR, "silent_audio.aac")
 
 MAX_SECONDS = 248
 OVERFLOW_SECONDS = 121

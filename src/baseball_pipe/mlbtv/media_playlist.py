@@ -15,7 +15,6 @@ AVERAGE_BANDWIDTH = "average-bandwidth"
 CODECS = "codecs"
 RESOLUTION = "resolution"
 FRAME_RATE = "frame-rate"
-AUDIO = "audio"
 SUBTITLES = "subtitles"
 
 # SUBTITLE / AUDIO KINDA KEYS

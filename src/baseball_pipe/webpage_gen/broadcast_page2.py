@@ -39,7 +39,7 @@ async def serve_broadcast(request):
     if not selected_broadcast:
         return serve_no_broadcast(gamePK, mediaId)
 
-    broadcast_name = u.safe_get(broadcast, 'name', default=None)
+    broadcast_name = u.safe_get(selected_broadcast, 'name', default=None)
     broadcast_name = u.presenter_remover(broadcast_name)
     cast_type = u.safe_get(selected_broadcast, 'type', default="Unknown")
 
@@ -85,9 +85,6 @@ async def serve_broadcast(request):
 
     #STREAM
     video_url = f"{base_url}/{gamePK}/{mediaId}/master.m3u8"
-
-    #VIDEO OVERRIDE
-    #video_url = "https://baseballpipe.com/849815/654ea42b-9677-43c6-912b-a50a8d9a8b70/849815-ND_192K.m3u8"
 
     error = None
     try:

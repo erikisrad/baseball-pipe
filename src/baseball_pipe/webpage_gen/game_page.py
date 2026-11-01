@@ -8,7 +8,6 @@ import baseball_pipe.mlb.mlb_stats
 logger = logging.getLogger(__name__)
 PACKAGE_ROOT = os.path.dirname(os.path.dirname(__file__))
 GAME_HTML = os.path.join(PACKAGE_ROOT, "html", "game.html")
-NO_GAME_HTML = os.path.join(PACKAGE_ROOT, "html", "no_game.html")
 
 async def serve_game(request):
     gamePK = request.match_info.get("gamePK")
@@ -52,10 +51,6 @@ async def serve_game(request):
     series_description = u.safe_get(game, "seriesDescription", default="Unknown series")
     if series_string and not "series" in series_description.lower():
         series_description = f"{series_description} Series"
-
-    #MISC
-    # game_description = u.safe_get(game, "ifNecessaryDescription", default="Unknown")
-    # day_night = u.safe_get(game, "dayNight", default="Unknown")
 
     #TIME
     venue = u.safe_get(game, "venue", "name", default="Unknown Venue")
@@ -106,14 +101,6 @@ def serve_no_game(gamePK):
 
     logger.warning(f"no game found for: {gamePK}")
     return web.Response(text=f"This isn't a valid gamePK: {gamePK}\nTry again", status=400)
-
-    # logger.warning(f"returning no game data for {gamePK}")
-    # with open(NO_GAME_HTML) as f:
-    #     template = Template(f.read())
-    # html = template.substitute(gamePK=gamePK)
-    # return web.Response(text=html, content_type="text/html", headers={
-    #     "Access-Control-Allow-Origin": "*"
-    # })
 
 def construct_broadcasts(broadcasts, gamePK, short):
 
@@ -182,10 +169,3 @@ def get_language(language):
         "ru":"Russian"
     }
     return languages.get(language, language)
-
-def pretty_print_tz_city(tz: str) -> str:
-    try:
-        return tz.rsplit("/", 1)[-1].replace("_", " ")
-    except IndexError:
-        logger.warning(f"failed to parse city from timezone {tz}")
-        return tz
