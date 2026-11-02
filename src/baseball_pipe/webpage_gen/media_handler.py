@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import re
 import subprocess
 import time
 from aiohttp import web
@@ -26,6 +27,7 @@ async def serve_master_playlist(request: web.Request, stream: Stream):
     mediaId = request.match_info.get("mediaId")
 
     playlist = await stream.get_master_playlist()
+    playlist = await filter_master_playlist(request, playlist)
     own_base = f"{request.url.origin()}/{gamePK}/{mediaId}/"
     playlist = prefix_master_urls(playlist, own_base)
 
@@ -33,6 +35,73 @@ async def serve_master_playlist(request: web.Request, stream: Stream):
     logger.info(f"served rewritten master playlist in {serve_ms:.2f}ms, {len(playlist.splitlines())} total lines")
 
     return web.Response(text=playlist, headers=cors_headers("application/vnd.apple.mpegurl"))
+
+
+async def filter_master_playlist(request: web.Request, playlist):
+    query = {k.lower(): v.lower() for k, v in request.query.items()}
+    bandwidth = query.get("bw")
+    resolution = query.get("res")
+    frame_rate = query.get("fps")
+
+    if not (bandwidth or resolution or frame_rate):
+        return playlist
+
+    lines = playlist.splitlines()
+
+    variants = []
+    i = 0
+
+    while i < len(lines):
+        if lines[i].startswith("#EXT-X-STREAM-INF"):
+            pairs = re.findall(r'([A-Z0-9-]+)=("[^"]*"|[^,]+)', lines[i].split(":", 1)[1])
+            attrs = {k.lower(): v.strip('"') for k, v in pairs}
+            variants.append({"attrs": attrs, "inf": lines[i], "uri": lines[i + 1]})
+            i += 1
+        i += 1
+
+    if not variants:
+        return playlist
+
+    matches = []
+    if frame_rate:
+        matches = [v for v in variants if v["attrs"].get("frame-rate") and round(float(v["attrs"]["frame-rate"])) == int(frame_rate)]
+        if matches:
+            variants = matches
+        else:
+            logger.warning(f"no variants matched frame-rate filter value: {frame_rate}")
+
+    if resolution:
+        matches = [v for v in variants if v["attrs"].get("resolution") == resolution]
+        if matches:
+            variants = matches
+        else:
+            logger.warning(f"no variants matched resolution filter value: {resolution}")
+
+    if bandwidth:
+        if bandwidth == "max":
+            matches = max(variants, key=lambda v: int(v["attrs"].get("bandwidth", 0)))
+        elif bandwidth == "min":
+            matches = min(variants, key=lambda v: int(v["attrs"].get("bandwidth", 0)))
+        else:
+            logger.warning(f"invalid bandwidth filter value: {bandwidth}")
+
+        if matches:
+            variants = [matches]
+
+    chosen = [v["inf"] for v in variants]
+    out = []
+    i = 0
+    while i < len(lines):
+        if lines[i].startswith("#EXT-X-STREAM-INF:"):
+            if lines[i] in chosen:
+                out.append(lines[i])
+                out.append(lines[i + 1])
+            i += 2
+        else:
+            out.append(lines[i])
+            i += 1
+    
+    return "\n".join(out)
 
 async def serve_media_playlist(request: web.Request, stream: Stream, path: str):
     serve_start = time.perf_counter()

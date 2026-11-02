@@ -51,7 +51,6 @@ def generate_games_table(games, tz):
             <thead>
                 <tr>
                     <th>Game</th>
-                    <th>Free</th>
                     <th>{offset}</th>
                     <th>State</th>
                 </tr>
@@ -83,24 +82,15 @@ def generate_games_table(games, tz):
             except Exception as e:
                 logger.warning(f"failed to get linescore info for game {gamePK}: {e}")
 
-        free = False
-
-        for broadcast in game.get("broadcasts", []):
-            if u.safe_get(broadcast, "freeGame", default=False):
-                free = True
-                break
-
         left = f"({aw}-{al}) {an}"
         right = f"{hn} ({hw}-{hl})"
 
         time_str = u.pretty_print_time_in_tz(game_datetime, tz)
-        free_marker = "★" if free else ""
         link = f'<a href="/{gamePK}"><span class="left">{left}</span><span class="at"> @ </span><span class="right">{right}</span></a>'
 
         table += f"""
                 <tr>
                     <td data-label="Game">{link}</td>
-                    <td data-label="Free">{free_marker}</td>
                     <td data-label="{offset}">{time_str}</td>
                     <td data-label="State">{status}</td>
                 </tr>"""

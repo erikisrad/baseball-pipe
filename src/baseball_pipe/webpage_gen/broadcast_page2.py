@@ -85,6 +85,8 @@ async def serve_broadcast(request):
 
     #STREAM
     video_url = f"{base_url}/{gamePK}/{mediaId}/master.m3u8"
+    if request.query_string:
+        video_url += f"?{request.query_string}"
 
     error = None
     try:
