@@ -8,6 +8,7 @@ import jinja2
 from curl_cffi.requests import AsyncSession
 from aiohttp_remotes import setup as setup_remotes, XForwardedRelaxed
 import baseball_pipe.webpage_gen.login_page
+import baseball_pipe.webpage_gen.home_page
 import baseball_pipe.webpage_gen.date_page
 import baseball_pipe.webpage_gen.game_page
 import baseball_pipe.server.router
@@ -101,7 +102,7 @@ class WebServer:
         self.app.router.add_get("/johnnysucks", baseball_pipe.server.router.serve_johnnysucks)
 
         # Named keyword routes
-        self.app.router.add_get("/", baseball_pipe.server.router.serve_today)
+        self.app.router.add_get("/", baseball_pipe.webpage_gen.home_page.serve_home)
         self.app.router.add_get("/today", baseball_pipe.server.router.serve_today)
         self.app.router.add_get("/yesterday", baseball_pipe.server.router.serve_yesterday)
         self.app.router.add_get("/tomorrow", baseball_pipe.server.router.serve_tomorrow)

@@ -8,6 +8,7 @@ import baseball_pipe.mlb.mlb_stats
 logger = logging.getLogger(__name__)
 PACKAGE_ROOT = os.path.dirname(os.path.dirname(__file__))
 GAME_HTML = os.path.join(PACKAGE_ROOT, "html", "game.html")
+FILTER_KEYS = ("broadcast", "type", "side", "state", "language", "availability")
 
 async def serve_game(request):
     gamePK = request.match_info.get("gamePK")
@@ -72,6 +73,31 @@ async def serve_game(request):
 
     #BROADCASTS
     broadcasts = game.get("broadcasts", [])
+
+    filters = {k: request.query.get(k) for k in FILTER_KEYS if request.query.get(k)}
+    team_query = request.query.get("team")
+
+    if filters:
+        matches = [b for b in broadcasts if broadcast_matches(b, game, short, filters)]
+
+        if team_query and len(matches) > 1:
+            narrowed = [b for b in matches if side_matches(u.safe_get(b, 'homeAway', default=''), team_query, game, short)]
+            if narrowed:
+                matches = narrowed
+
+        if len(matches) == 1:
+            media_id = u.safe_get(matches[0], 'mediaId', default=None)
+            if not media_id:
+                return serve_no_broadcast_match(gamePK, filters, team_query)
+            redirect_url = f"/{gamePK}/{media_id}"
+            extra = u.filter_query_string(request.query, set(FILTER_KEYS) | {"team"})
+            if extra:
+                redirect_url += f"?{extra}"
+            return web.HTTPFound(redirect_url)
+
+        if len(matches) != 1:
+            return serve_no_broadcast_match(gamePK, filters, team_query)
+
     if broadcasts:
         broadcast_html = construct_broadcasts(broadcasts, gamePK, short)
     else:
@@ -101,6 +127,43 @@ def serve_no_game(gamePK):
 
     logger.warning(f"no game found for: {gamePK}")
     return web.Response(text=f"This isn't a valid gamePK: {gamePK}\nTry again", status=400)
+
+def broadcast_matches(broadcast, game, short, filters):
+    name = u.presenter_remover(u.safe_get(broadcast, 'name', default='') or '')
+    checks = {
+        "broadcast": name,
+        "type": u.safe_get(broadcast, 'type', default=''),
+        "state": u.safe_get(broadcast, 'mediaState', 'mediaStateText', default=''),
+        "language": get_language(u.safe_get(broadcast, 'language', default='')),
+        "availability": u.safe_get(broadcast, 'availability', 'availabilityText', default=''),
+    }
+    for key, value in checks.items():
+        query_value = filters.get(key)
+        if query_value and query_value.lower() not in value.lower():
+            return False
+
+    side_query = filters.get("side")
+    side = u.safe_get(broadcast, 'homeAway', default='')
+    if side_query and not side_matches(side, side_query, game, short):
+        return False
+
+    return True
+
+def side_matches(side, query_value, game, short):
+    query_value = query_value.lower()
+    if query_value in ("home", "away"):
+        return side == query_value
+    if query_value == short.get(side, "").lower():
+        return True
+    team_name = u.safe_get(game, "teams", side, "team", "name", default="")
+    return query_value in team_name.lower()
+
+def serve_no_broadcast_match(gamePK, filters, team_query):
+    desc = ", ".join(f"{k}={v!r}" for k, v in filters.items())
+    if team_query:
+        desc += f"{', ' if desc else ''}team={team_query!r}"
+    logger.warning(f"no single broadcast match for game {gamePK}: {desc}")
+    return web.Response(text=f"No single broadcast found for gamePK {gamePK} matching {desc}\nTry again", status=400)
 
 def construct_broadcasts(broadcasts, gamePK, short):
 

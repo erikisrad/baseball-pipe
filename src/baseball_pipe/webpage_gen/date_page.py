@@ -22,7 +22,26 @@ async def serve_date(request):
         return serve_no_date(date_str)
     
     games = await baseball_pipe.mlb.mlb_stats.get_games_on_date(start_date=date, session=session, broadcasts=True)
-        
+
+    team_query = request.query.get("team")
+    if team_query:
+        index_query = request.query.get("index")
+        try:
+            index = int(index_query) if index_query else 1
+        except ValueError:
+            return serve_no_team_match(date_str, team_query, index_query)
+
+        matches = match_games_by_team(games, team_query)
+        if index < 1 or index > len(matches):
+            return serve_no_team_match(date_str, team_query, index_query)
+
+        gamePK = u.safe_get(matches[index - 1], "gamePk", default=None)
+        redirect_url = f"/{gamePK}"
+        extra = u.filter_query_string(request.query, {"index"})
+        if extra:
+            redirect_url += f"?{extra}"
+        return web.HTTPFound(redirect_url)
+
     yesterday = (date - u.timedelta(days=1)).strftime("%Y%m%d")
     tomorrow = (date + u.timedelta(days=1)).strftime("%Y%m%d")
     yesterday_btn = f'<button onclick="window.location.href=&quot;/{yesterday}&quot;;">&lt;</button>'
@@ -132,4 +151,18 @@ def reverse_final_scores(games):
 def serve_no_date(date_str):
     logger.warning(f"invalid date format: {date_str}")
     return web.Response(text=f"This isn't a valid YYYYMMDD date: {date_str}\nTry again", status=400)
-    
+
+def match_games_by_team(games, team_query):
+    team_query = team_query.lower()
+    matches = []
+    for game in games:
+        for side in ("home", "away"):
+            name = u.safe_get(game, "teams", side, "team", "name", default="")
+            if team_query in name.lower():
+                matches.append(game)
+                break
+    return matches
+
+def serve_no_team_match(date_str, team_query, index_query):
+    logger.warning(f"no game match for {date_str}: team={team_query!r} index={index_query!r}")
+    return web.Response(text=f"No game found on {date_str} matching team={team_query!r} index={index_query!r}\nTry again", status=400)

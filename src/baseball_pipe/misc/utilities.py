@@ -1,6 +1,7 @@
 import asyncio
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+from urllib.parse import urlencode
 import logging
 
 from aiohttp import web
@@ -65,6 +66,12 @@ def get_date(days_ago=None, start_date=None):
         date = (date - timedelta(days=days_ago))
 
     return date
+
+def filter_query_string(query, exclude):
+    exclude_lower = {k.lower() for k in exclude}
+    pairs = [(k, v) for k, v in query.items() if k.lower() not in exclude_lower]
+    return urlencode(pairs)
+
 
 def get_tz_as_offset(tz: str = None):
     zone = ZoneInfo(tz) if tz else None
