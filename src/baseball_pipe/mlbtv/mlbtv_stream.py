@@ -2,46 +2,29 @@ import logging
 import re
 from datetime import datetime, timezone
 import baseball_pipe.mlb.mlb_stats
+from baseball_pipe.mlbtv.account2 import Account
 from baseball_pipe.mlbtv.token import Token
+from baseball_pipe.standalone.base_stream import BaseStream
 
 from baseball_pipe.misc import utilities as u
 from baseball_pipe.misc import header_handler as e
 from baseball_pipe.playlist import filler as gfs
-from baseball_pipe.mlbtv import media_playlist
 import aiohttp
-from dataclasses import dataclass
 
 GRAPHQL_URL = "https://media-gateway.mlb.com/graphql"
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class StreamTemplate():
-    line_count:int
-    playlist:list[str]
-    cued_out:bool # in ad break
-    stream_time:float # moving playlist timestamp
-    started_segments:bool # have we started writing segments yet
-
-    #used for playlist filling
-    ad_elapsed:float
-    expected_ad_duration:float
-    last_key:str
-    last_segment:str
-    filler_lines:list[str]
-    filler_elapsed:float
-    header:str
-
-class Stream():
+class MlbtvStream(BaseStream):
 
     def __init__(self,
-                 token:Token,
+                 account:Account,
                  game_pk:str,
                  media_id:str,
                  session:aiohttp.ClientSession,
                  proxy:str = None):
-        
-        self.token = token
+
+        self.account = account
         self.game_pk = game_pk
         self.media_id = media_id
         self.url = "https://www.mlb.com/tv/g%s/v%s" % (self.game_pk, self.media_id)
@@ -51,13 +34,18 @@ class Stream():
         self.reset()
 
     async def inititialize(self):
+
+        if not self._token:
+            self._token = await self.account.get_token()
+    
         if not self._master_playlist_url:
             await self._gen_master_playlist_url()
 
     def reset(self):
+        super().reset()
 
         self._start = None
-        self._live_status = None
+        self._token:Token = None
 
         # via _gen_session()
         self._device_id = ""
@@ -68,27 +56,11 @@ class Stream():
         self._expiration = None
         self._upstream_base_url = None
 
-        # via _gen_master_playlist()
-        self._master_playlist = None
-
-        # via _gen_variants()
-        self._variants = None
-
     def __str__(self):
         return f"{self.game_pk}/{self.media_id}"
-    
+
     def __repr__(self):
         return f"{self.game_pk}/{self.media_id}"
-    
-    # GETS /SETS
-    def get_live_status(self):
-        return self._live_status
-
-    def set_live_status(self, playlist_type):
-        playlist_type = playlist_type.lower()
-        if playlist_type not in ["vod", "live", "event"]:
-            raise ValueError(f"invalid playlist type: {playlist_type}")
-        self._live_status = playlist_type
 
     async def get_master_playlist_url(self):
         if not self._master_playlist_url:
@@ -99,29 +71,10 @@ class Stream():
         await self._gen_master_playlist()
         return self._master_playlist
 
-    async def get_variant(self, name):
-        if not self._variants:
-            await self._gen_variants()
-
-        return self._variants.get(name, None)
-
-    async def get_upstream_base_url(self):
-        if not self._upstream_base_url:
-            await self._gen_master_playlist_url()
-
-        return self._upstream_base_url
-
-    async def get_segment(self, path):
-        if not self._upstream_base_url:
-            await self._gen_master_playlist_url()
-
-        return await self._gen_segment(path)
-
     async def get_start(self):
         if not self._start:
             self._start, self._end = await baseball_pipe.mlb.mlb_stats.get_game_start_end_times(self.game_pk, self.session)
         return self._start
-
 
     @staticmethod
     def _parse_expiration(expiration: str) -> datetime:
@@ -129,7 +82,7 @@ class Stream():
         expiration = expiration.replace('Z', '+00:00') if expiration.endswith('Z') else expiration
         return datetime.fromisoformat(expiration)
 
-    def is_expired(self) -> bool:
+    async def is_expired(self) -> bool:
         if not self._expiration:
             return False
 
@@ -137,7 +90,9 @@ class Stream():
             expiration = self._parse_expiration(self._expiration)
             seconds_until_expired = round((expiration - datetime.now(timezone.utc)).total_seconds())
             logger.debug(f"stream {self} expires in {seconds_until_expired} seconds")
-            return seconds_until_expired <= 30
+
+            return seconds_until_expired <= 30 and self._token.is_expired()
+       
         except Exception as err:
             logger.warning(f"Unable to determine expiration for {self} stream: {err}")
             return True
@@ -182,7 +137,7 @@ class Stream():
         headers = {
             **e.GRAPHQL_HEADER,
             "Accept": "application/json, text/plain, */*",
-            "Authorization": f"{self.token.token_type} {self.token.access_token}",
+            "Authorization": f"{self._token.token_type} {self._token.access_token}",
             "Content-Type": "application/json",
             "Referer": "https://www.mlb.com/tv/g%s" % self.game_pk,
         }
@@ -262,7 +217,7 @@ class Stream():
         headers = {
             **e.GRAPHQL_HEADER,
             "Accept": "application/json, text/plain, */*",
-            "Authorization": f"{self.token.token_type} {self.token.access_token}",
+            "Authorization": f"{self._token.token_type} {self._token.access_token}",
             "Content-Type": "application/json",
             "Referer": self.url,
         }
@@ -281,7 +236,7 @@ class Stream():
         try:
             self._master_playlist_url = res_json["data"]["initPlaybackSession"]["playback"]["url"]
             self._expiration = res_json["data"]["initPlaybackSession"]["playback"]["expiration"]
-            self._upstream_base_url = self._master_playlist_url.rsplit('/', 1)[0] + '/'
+            #self._upstream_base_url = self._master_playlist_url.rsplit('/', 1)[0] + '/'
         except(KeyError, TypeError) as err:
             logger.error(f"Failed to parse master playlist url for {self} stream: {err}")
             raise err
@@ -323,73 +278,3 @@ class Stream():
 
         if not self._variants:
             await self._gen_variants()
-
-    async def _gen_variants(self):
-
-        if not self._master_playlist:
-            await self._gen_master_playlist()
-
-        def fresh_template():
-            return StreamTemplate(line_count=0, playlist=[], cued_out=False, stream_time=None,
-                                started_segments=False, ad_elapsed=0.0, expected_ad_duration=0.0,
-                                last_key=None, last_segment=None, filler_lines=[], filler_elapsed=0.0, header=None)
-        
-        video_template = fresh_template()
-        self._variants = {}
-
-        try:
-            lines = iter(self._master_playlist.splitlines())
-            for line in lines:
-
-                if line.startswith("#EXT-X-STREAM-INF:") and media_playlist.FRAME_RATE.upper() in line:
-                    line = line.split(":", 1)[1]
-                    pairs = re.findall(r'([A-Z0-9-]+)=("[^"]*"|[^,]+)', line)
-                    media_dict = {k.lower(): v.strip('"') for k, v in pairs}
-
-                    next_line = next(lines)
-                    name = next_line.rsplit('/', 1)[-1]
-                    self._variants[name] = media_playlist.Playlist(self, name, media_dict, video_template)
-
-                elif (line.startswith("#EXT-X-MEDIA:") and "URI=" in line) or (line.startswith("#EXT-X-STREAM-INF:") and "mp4" in line):
-                    line = line.split(":", 1)[1]
-                    pairs = re.findall(r'([A-Z0-9-]+)=("[^"]*"|[^,]+)', line)
-                    media_dict = {k.lower(): v.strip('"') for k, v in pairs}
-
-                    if "uri" in media_dict:
-                        name = media_dict.pop("uri")
-                    else:
-                        next_line = next(lines)
-                        name = next_line.rsplit('/', 1)[-1]
-
-                    self._variants[name] = media_playlist.Playlist(self, name, media_dict, fresh_template())
-
-        except Exception as err:
-            logger.error(f"failed parsing variants for {self._master_playlist_url}: {err}")
-
-    async def _gen_segment(self, path):
-
-        if not self._upstream_base_url:
-            await self._gen_master_playlist_url()
-
-        target = self._upstream_base_url + path
-
-        headers = {
-            **e.MEDIA_HEADER,
-            "Accept": "*/*",
-            "Accept-Encoding": "identity;q=1, *;q=0",
-            "Sec-Fetch-Dest": "video",
-            "Sec-Fetch-Mode": "no-cors",
-            "Sec-Fetch-Site": "same-origin",
-        }
-
-        async def _fetch():
-            async with self.session.get(target, headers=headers, proxy=self.proxy, ssl=False) as res:
-                logger.debug(f"got response headers for {target}: status={res.status}")
-                if res.status != 200:
-                    raise Exception(f"Failed segment request: {res.status} {res.reason}")
-                data = await res.read()
-                logger.debug(f"finished reading {len(data)} bytes for {target}")
-                return data
-
-        logger.debug(f"sending segment request to {target}")
-        return await u.with_timeout(_fetch(), 45, f"segment request to {target}")

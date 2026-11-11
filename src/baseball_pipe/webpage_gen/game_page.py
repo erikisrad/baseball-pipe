@@ -2,6 +2,8 @@ from aiohttp import web
 from string import Template
 import logging
 import os
+
+from numpy import short
 import baseball_pipe.misc.utilities as u
 import baseball_pipe.mlb.mlb_stats
 
@@ -9,6 +11,9 @@ logger = logging.getLogger(__name__)
 PACKAGE_ROOT = os.path.dirname(os.path.dirname(__file__))
 GAME_HTML = os.path.join(PACKAGE_ROOT, "html", "game.html")
 FILTER_KEYS = ("broadcast", "type", "side", "state", "language", "availability")
+
+CONDENSED = "condensed"
+RECAP = "recap"
 
 async def serve_game(request):
     gamePK = request.match_info.get("gamePK")
@@ -26,7 +31,6 @@ async def serve_game(request):
     away_name = u.safe_get(game, "teams", "away", "team", "name", default="Unknown")
 
     short = {
-
         "home": u.safe_get(game, "teams", "home", "team", "abbreviation", default="N/A"),
         "away": u.safe_get(game, "teams", "away", "team", "abbreviation", default="N/A")
     }
@@ -73,6 +77,7 @@ async def serve_game(request):
 
     #BROADCASTS
     broadcasts = game.get("broadcasts", [])
+    supplemental = u.safe_get(game, "content", "media", "epgAlternate", default=[])
 
     filters = {k: request.query.get(k) for k in FILTER_KEYS if request.query.get(k)}
     team_query = request.query.get("team")
@@ -98,8 +103,9 @@ async def serve_game(request):
         if len(matches) != 1:
             return serve_no_broadcast_match(gamePK, filters, team_query)
 
-    if broadcasts:
-        broadcast_html = construct_broadcasts(broadcasts, gamePK, short)
+    if broadcasts or supplemental:
+        broadcast_html = construct_broadcasts(broadcasts, gamePK, short, supplemental)
+
     else:
         broadcast_html = '<p class="no-games">No broadcast info available for this game.</p>'
 
@@ -165,7 +171,7 @@ def serve_no_broadcast_match(gamePK, filters, team_query):
     logger.warning(f"no single broadcast match for game {gamePK}: {desc}")
     return web.Response(text=f"No single broadcast found for gamePK {gamePK} matching {desc}\nTry again", status=400)
 
-def construct_broadcasts(broadcasts, gamePK, short):
+def construct_broadcasts(broadcasts, gamePK, short, supplemental):
 
     broadcast_html = '''<table>
             <thead>
@@ -213,6 +219,39 @@ def construct_broadcasts(broadcasts, gamePK, short):
                     <td data-label="Language">{language}</td>
                     <td data-label="Availability">{availability}</td>
                 </tr>""" 
+
+    for item in supplemental:
+        unpacked = item["items"][0]
+        try:
+            duration = unpacked["duration"]
+        except (KeyError, IndexError):
+            logger.warning(f"unable to unpack supplemental item for game {gamePK}: {item}")
+            duration = "N/A"
+
+        title = u.safe_get(item, 'title', default='N/A')
+
+        if "extended highlights" in title.lower():
+            simple_title = "Condensed Game"
+            short_title = CONDENSED
+        elif "daily recap" in title.lower():
+            simple_title = "Daily Recap"
+            short_title = RECAP
+        else:
+            logger.warning(f"unknown supplemental title for game {gamePK}: {title}")
+            continue
+
+        broadcast_str = f'<a href="/{gamePK}/{short_title}">{simple_title}</a>'
+
+        broadcast_html += f"""
+                <tr>
+                    <td data-label="Broadcast">{broadcast_str}</td>
+                    <td data-label="Type">TV</td>
+                    <td data-label="Side">N/A</td>
+                    <td data-label="State">Media Archive</td>
+                    <td data-label="Language">English</td>
+                    <td data-label="Availability">Supplemental Media</td>
+                </tr>""" 
+        
     broadcast_html += '''
             </tbody>
         </table>'''

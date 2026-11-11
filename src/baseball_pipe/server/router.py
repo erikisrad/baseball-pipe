@@ -2,9 +2,12 @@ import os
 from datetime import datetime, timedelta, timezone
 from aiohttp import web
 import baseball_pipe.misc.utilities as u
+from baseball_pipe.webpage_gen.game_page import CONDENSED, RECAP
 import baseball_pipe.webpage_gen.media_handler as media_handler
 from baseball_pipe.mlbtv.account2 import Account
-from baseball_pipe.mlbtv.stream import Stream
+from baseball_pipe.mlbtv.mlbtv_stream import MlbtvStream
+from baseball_pipe.standalone.standalone_stream import StandaloneStream
+from baseball_pipe.standalone.stream_bucket import StreamBucket
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
 
@@ -26,7 +29,7 @@ async def serve_tomorrow(request: web.Request):
 
 async def route_media(request: web.Request):
     gamePK = request.match_info.get("gamePK")
-    mediaId = request.match_info.get("mediaId")
+    mediaID = request.match_info.get("mediaId")
     path = request.match_info.get("path")
 
     # this route has no format constraint on gamePK/mediaId, so browser
@@ -46,9 +49,8 @@ async def route_media(request: web.Request):
     if path.startswith("filler/"):
         return await media_handler.serve_filler_segment(request, path)
 
-    mlbtv_account: Account = request.app["mlbtv_account"]
-
-    stream: Stream = await mlbtv_account.get_stream(gamePK, mediaId)
+    bucket:StreamBucket = request.app["stream_bucket"]
+    stream = await bucket.get_stream(gamePK, mediaID, request)
 
     if path == "master.m3u8":
         return await media_handler.serve_master_playlist(request, stream)

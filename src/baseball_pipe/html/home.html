@@ -16,25 +16,31 @@
             <p><strong>How it works</strong></p>
             <p>Baseball Pipe is a web application that provides access to Major League Baseball (MLB) game broadcasts and related media.</p>
             <ul>
-                <li>Each date provides a list of games for that day.</p>
-                <li>Each game provides a list of available broadcasts and media.</p>
-                <li>Each broadcast provides a video (or audio) player that allows multiple custom enhancemments, providing a better viewing experience than the official MLB.tv player.</p>
+                <li>The web GUI allows for easy navigation and selection of games and broadcasts.</li>
                 <ul>
-                    <li>VODs (non-live broadcasts) skip ad breaks.</li>
-                    <li>Live games replace ads with a silent countdown until play resumes.</li>
-                    <li>Chromecast support is available.</li>
-                    <li>Multiple audio options can be swapped in during video playback, including radio broadcasts and Spanish commentary.</li>
-                    <li>Subtitles are available.</li>
-                    <li>Both variable quality / forced resolution, fps, and bandwidth options are available.</li>
+                    <li>Each date page provides a list of games for that day.</li>
+                    <li>Each game page provides a list of available broadcasts and media.</li>
+                    <li>Each broadcast page provides a video (or audio) player.</li>
                 </ul>
+                <li>Query strings can be used to bypass the web gui, useful for M2M interfaces.</li>
+                <li>This means broadcasts can be piped into other applications, such as VLC.</li>
+            </ul>
+            <p>Baseball Pipe broadcasts aim to provide a better viewing experience than the official MLB.tv player.</p>
+            <ul>
+                <li>VODs (non-live broadcasts) skip ad breaks.</li>
+                <li>Live games replace ads with a silent countdown until play resumes.</li>
+                <li>Chromecast support is available.</li>
+                <li>Multiple audio options can be swapped in during video playback, including radio broadcasts and Spanish commentary.</li>
+                <li>Multiple subtitle tracks are available.</li>
+                <li>Both variable quality and forced resolution/fps options are available.</li>
             </ul>
             </br>
 
             <p><strong>Start with a date</strong></p>
             <ul>
-                <li>Any 8-digit formatted date can be appeneded to the URL to show games on that date.
+                <li>Any 8-digit formatted date can be appeneded to the URL to show games on that date (YYYMMDD).
                 <ul>
-                    <li><a href="/20260822">baseballpipe.com/20260822</a></li>
+                    <li><a href="/20260925">baseballpipe.com/20260925</a></li>
                 </ul>
                 <li>You can also use the keywords "today", "yesterday", and "tomorrow".</li>
                 <ul>
@@ -50,30 +56,55 @@
                 <li>From a date page, games are displayed in order of start time, converted to your local timezone.</li>
                 <li>If you know the gamePK (unique identifier) of a game, you can go directly to that game page.
                 <ul>
-                    <a href="/825044">baseballpipe.com/825044</a></li>
+                    <li><a href="/824703">baseballpipe.com/824703</a></li>
                 </ul>
-                <li>You can also append query strings to a date URL to filter directly to a game.</li>
+                <li>You can also append a team query string to a date URL to filter directly to a game.</li>
                 <ul>
-                    <li><strong>team</strong>: Filter by team. <a href="/20260822?team=reds">baseballpipe.com/20260822?team=reds</a></li>
-                    <li><strong>index</strong>: Filter by game number, useful for double headers. <a href="/20260822?team=reds&index=2">baseballpipe.com/20260822?team=reds&index=2</a></li>
+                    <li><a href="/20260925?team=cubs">baseballpipe.com/20260925?team=cubs</a></li>
+                </ul>
+                <li>Include an index if there's a double header.</li>
+                <ul>
+                    <li><a href="/20260925?team=cubs&index=2">baseballpipe.com/20260925?team=cubs&index=2</a></li>
                 </ul>
             </ul> 
             </br>
 
             <p><strong>Select a broadcast</strong></p>
-            <p>Multiple broadcasts are available for each game, including video streams and audio only radio broadcasts</p>
-            <p>If you know the mediaID of a specific broadcast, you can go directly to that broadcast page. (baseballpipe.com/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c)</p>
-            <p>You can also append query strings to a game URL to filter directly to a broadcast.</p>
             <ul>
-                <li><strong>type</strong>: Filter by media type. (baseballpipe.com/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?type=tv)</li>
-                <li><strong>side</strong>: Filter by home/away broadcast:</li>
-                <li><strong>language</strong>: Filter by language. (baseballpipe.com/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?language=spanish)</li>
+                <li>Multiple broadcasts are available for each game, including video streams and radio broadcasts</li>
+                <li>If you know the mediaID of a specific broadcast, you can go directly to that broadcast page.</li>
                 <ul>
-                    <li>baseballpipe.com/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?side=away</li>
-                    <li>baseballpipe.com/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?side=reds</li>
-                    <li>baseballpipe.com/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?side=cin</li>
+                    <li><a href="/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c">baseballpipe.com/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c</a></li>
                 </ul>
-            <p>These query strings <strong>must</strong> be combined to filter the broadcasts down to one selection. (baseballpipe.com/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?type=tv&side=away)</p>
+                <li>You can also specify the broadcaster name in a query string.</li>
+                <ul>
+                    <li><a href="/825044?broadcast=reds.tv">baseballpipe.com/825044?broadcast=reds.tv</a></li>
+                </ul>
+                <li>Other query strings are available, but must be combined to narrow down to one broadcast.</li>
+                <ul>
+                    <li><a href="/825044?type=tv&side=reds&language=english">baseballpipe.com/825044?type=tv&side=reds&language=english</a></li>
+                </ul>
+            </ul>
+            </br>
+
+            <p><strong>Tune the broadcast</strong></p>
+            <ul>
+                <li>By default, broadcast playback varies in quality based on network speed and screen resolution.</li>
+                <li>You can use query strings to force a specific resoltion.</li>
+                <ul>
+                    <li><a href="/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?res=1920x1080">baseballpipe.com/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?res=1920x1080</a></li>
+                </ul>
+                <li>And/Or an FPS.</li>
+                <ul>
+                    <li><a href="/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?fps=60">baseballpipe.com/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?fps=60</a></li>
+                </ul>
+                <li>If you just want to force the best quality, its easier to just force the max bandwidth.</li>
+                <ul>
+                    <li><a href="/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?bw=max">baseballpipe.com/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?bw=max</a></li>
+                </ul>
+            </ul>
+            </br>
+            
         </div>
     </body>
 </html>

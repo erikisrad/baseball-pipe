@@ -3,6 +3,7 @@ import logging
 import aiohttp
 import baseball_pipe.misc.utilities as u
 import baseball_pipe.misc.header_handler as e
+from baseball_pipe.webpage_gen.game_page import CONDENSED, RECAP
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +81,34 @@ async def get_game_content(gamePK, session:aiohttp.ClientSession):
         game = {}
 
     return game
+
+async def get_supplemental_URL(gamePK, session:aiohttp.ClientSession, target):
+    game = await get_game_content(gamePK, session)
+
+    supplemental = u.safe_get(game, "content", "media", "epgAlternate", default=[])
+    for item in supplemental:
+        title = u.safe_get(item, 'title', default='N/A')
+        
+        if "extended highlights" in title.lower():
+            short_title = CONDENSED
+
+        elif "daily recap" in title.lower():
+            short_title = RECAP
+
+        else:
+            short_title=title.lower()
+
+        if short_title == target:
+            try:
+                unpacked = item["items"][0]
+                playbacks = unpacked["playbacks"]
+                for playback in playbacks[::-1]:
+                    if "cloud" in playback.get("name").lower() and playback.get("url").lower().endswith(".m3u8"):
+                        return(playback.get("url"))
+
+            except Exception as err:
+                logger.error(f"failed to unpack supplemental item for game {gamePK}: {item} - {err}")
+
 
 async def get_game_start_end_times(gamePK,
                                     session:aiohttp.ClientSession,

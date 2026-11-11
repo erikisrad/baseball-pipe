@@ -13,7 +13,7 @@ import logging
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import padding as sym_padding
 
-from baseball_pipe.mlbtv.stream import Stream
+from baseball_pipe.mlbtv.mlbtv_stream import MlbtvStream
 import baseball_pipe.mlbtv.media_playlist
 from baseball_pipe.playlist import filler as gfs
 
@@ -62,11 +62,13 @@ def is_garbage_line(line):
     return line.startswith(GARBAGE_PREFIXES)
 
 
-def uri_search_and_replace(line, full_url):
+def uri_search_and_replace(line, full_url, extra_query=None):
     logger.debug(f"rewriting URL for line {line}")
     old = URI_PATTERN.search(line)
     assert old, f"failed to find URI in line: {line}"
     new = full_url + old.group(1)
+    if extra_query:
+        new += f"?{extra_query}"
     new_line = URI_PATTERN.sub(f'URI="{new}"', line)
     return new_line
 
@@ -86,7 +88,7 @@ def format_program_date_time(dt: datetime) -> str:
     return f"#EXT-X-PROGRAM-DATE-TIME:{ts_str}"
 
 
-def prefix_master_urls(playlist, base_url):
+def prefix_master_urls(playlist, base_url, extra_query=None):
     lines = []
     for line in playlist.splitlines():
 
@@ -95,19 +97,22 @@ def prefix_master_urls(playlist, base_url):
         elif line.startswith("http"):  # ALREADY A COMPLETE URL
             lines.append(line)
         elif "URI=" in line:  # URI
-            line = uri_search_and_replace(line, base_url)
+            line = uri_search_and_replace(line, base_url, extra_query)
             if line.startswith("#EXT-X-MEDIA:") and "TYPE=SUBTITLES" in line:
                 line = force_autoselect_no(line)  # forced subtitles are annoying as fuck
             lines.append(line)
         elif line.startswith("#"):  # NOT A URL
             lines.append(line)
         else:  # RELATIVE URL
-            lines.append(urljoin(base_url, line.strip()))
+            url = urljoin(base_url, line.strip())
+            if extra_query:
+                url += f"?{extra_query}"
+            lines.append(url)
 
     return "\n".join(lines)
 
 
-async def rewrite_media_playlist(stream: Stream, name: str, own_base: str):
+async def rewrite_media_playlist(stream: MlbtvStream, name: str, own_base: str, ad_mode: str = None):
 
     playlist: baseball_pipe.mlbtv.media_playlist.Playlist = await stream.get_variant(name)
     assert playlist, f"unknown playlist {name} for stream {stream}"
@@ -116,6 +121,27 @@ async def rewrite_media_playlist(stream: Stream, name: str, own_base: str):
         playlist_media = await playlist.get_media()
         lines = playlist_media.split('\n')
         stream.set_live_status(determine_live_status(lines))
+
+    ad_mode = ad_mode.lower() if ad_mode else None
+
+    if ad_mode == "strip":
+        return await nuke_playlist_ads(stream, playlist, own_base)
+
+    if ad_mode == "none":
+        return await rewrite_playlist_only(stream, playlist, own_base)
+
+    if ad_mode == "fill":
+        if playlist.type == baseball_pipe.mlbtv.media_playlist.VIDEO:
+            return await fill_playlist_ads2(stream, playlist, own_base)
+        elif playlist.type == baseball_pipe.mlbtv.media_playlist.AUDIO:
+            return await fill_audio_playlist_ads(stream, playlist, own_base)
+        elif playlist.type == baseball_pipe.mlbtv.media_playlist.SUBS:
+            return await fill_subtitle_playlist_ads(stream, playlist, own_base)
+        else:
+            return await nuke_playlist_ads(stream, playlist, own_base)
+
+    if ad_mode:
+        logger.warning(f"unrecognized ad mode {ad_mode!r} for {stream}/{name}, falling back to automatic selection")
 
     if playlist.type == baseball_pipe.mlbtv.media_playlist.VIDEO:
         if stream.get_live_status() == "vod":
@@ -152,7 +178,7 @@ def determine_live_status(lines):
                 return "live"
 
 
-async def rewrite_playlist_only(stream: Stream, playlist: "baseball_pipe.mlbtv.media_playlist.Playlist", base_url: str):
+async def rewrite_playlist_only(stream: MlbtvStream, playlist: "baseball_pipe.mlbtv.media_playlist.Playlist", base_url: str):
     """Debug-only pass-through: rewrites segment/key URLs to point through
     our own proxy and otherwise copies the upstream playlist verbatim -- no
     ad-cue handling, no filler substitution, and critically no
@@ -171,7 +197,7 @@ async def rewrite_playlist_only(stream: Stream, playlist: "baseball_pipe.mlbtv.m
     name = playlist.get_name()
     rendition_id = name.rsplit('.', 1)[0]  # "823657-HD_7500K.m3u8" -> "823657-HD_7500K"
 
-    template = copy.deepcopy(playlist.get_template())
+    template = copy.deepcopy(playlist.get_template("none"))
     rewritten = [line.replace(RENDITION_PLACEHOLDER, rendition_id) for line in template.playlist]
 
     fetch_start = time.perf_counter()
@@ -204,7 +230,7 @@ async def rewrite_playlist_only(stream: Stream, playlist: "baseball_pipe.mlbtv.m
 
     template.playlist = [line.replace(rendition_id, RENDITION_PLACEHOLDER) for line in rewritten]
     template.line_count = len(lines)
-    playlist.overwrite_template(template)
+    playlist.overwrite_template(template, "none")
 
     elapsed_ms = (time.perf_counter() - func_start) * 1000
     logger.info(f"rewrote pass-through playlist in {elapsed_ms:.2f}ms (upstream fetch {fetch_ms:.2f}ms), {len(new_lines)} new lines processed, {len(rewritten)} total lines")
@@ -229,10 +255,11 @@ async def rewrite_playlist_only(stream: Stream, playlist: "baseball_pipe.mlbtv.m
 # ---------------------------------------------------------------------------
 
 async def _rewrite_playlist_core(
-    stream: Stream,
+    stream: MlbtvStream,
     playlist: "baseball_pipe.mlbtv.media_playlist.Playlist",
     base_url: str,
     *,
+    cache_mode: str,
     log_label: str,
     on_cue_in,
     on_cue_out,
@@ -248,14 +275,15 @@ async def _rewrite_playlist_core(
     rendition_id = name.rsplit('.', 1)[0]  # "823657-HD_7500K.m3u8" -> "823657-HD_7500K"
 
     # deep copy, not just a reference -- stream.get_template() returns the
-    # one StreamTemplate shared by every rendition of this stream, and this
-    # function has several `await`s below before it writes back via
-    # overwrite_template(). Without an isolated copy, a concurrent call
-    # (e.g. a different rendition's poll interleaving through those awaits)
-    # could mutate the same live object out from under this one -- or,
-    # worse, a hook's own filler_lines.pop(0) would mutate the *shared*
-    # list in place immediately, even before overwrite_template() ever runs.
-    template = copy.deepcopy(playlist.get_template())
+    # one StreamTemplate shared by every rendition of this stream (within
+    # this cache_mode), and this function has several `await`s below
+    # before it writes back via overwrite_template(). Without an isolated
+    # copy, a concurrent call (e.g. a different rendition's poll
+    # interleaving through those awaits) could mutate the same live object
+    # out from under this one -- or, worse, a hook's own
+    # filler_lines.pop(0) would mutate the *shared* list in place
+    # immediately, even before overwrite_template() ever runs.
+    template = copy.deepcopy(playlist.get_template(cache_mode))
     rewritten = [line.replace(RENDITION_PLACEHOLDER, rendition_id) for line in template.playlist]
     if extra_placeholder:
         extra_value, extra_token = extra_placeholder
@@ -393,7 +421,7 @@ async def _rewrite_playlist_core(
         cached = [line.replace(extra_value, extra_token) for line in cached]
     template.playlist = cached
     template.line_count = len(lines)
-    playlist.overwrite_template(template)
+    playlist.overwrite_template(template, cache_mode)
 
     elapsed_ms = (time.perf_counter() - func_start) * 1000
     logger.info(f"rewrote {log_label} playlist in {elapsed_ms:.2f}ms (upstream fetch {fetch_ms:.2f}ms), {len(new_lines)} new lines processed, {len(rewritten)} total lines")
@@ -429,12 +457,14 @@ def _pop_due_filler_lines(template, rewritten, stream, name):
         template.filler_elapsed += segment_duration
 
 
-async def nuke_playlist_ads(stream: Stream, playlist: "baseball_pipe.mlbtv.media_playlist.Playlist", base_url: str):
+async def nuke_playlist_ads(stream: MlbtvStream, playlist: "baseball_pipe.mlbtv.media_playlist.Playlist", base_url: str):
     """Real content only -- ad breaks are silently skipped, no filler
     substitution. A single #EXT-X-DISCONTINUITY marks where the gap was;
-    unlike the fill-* modes, the raw CUE-IN/CUE-OUT tags and any
-    #EXT-X-KEY aren't re-asserted, since there's no filler encoding on
-    either side of the cut that needs one."""
+    unlike the fill-* modes, the raw CUE-IN/CUE-OUT tags aren't re-asserted
+    around it, since there's no filler encoding on either side of the cut
+    that needs one. The original #EXT-X-KEY (if any) is still tracked and
+    forwarded like any other line -- real segments still need it to
+    decrypt regardless of ad-handling mode."""
     name = playlist.get_name()
 
     def on_cue_in(template, line, rewritten):
@@ -448,8 +478,9 @@ async def nuke_playlist_ads(stream: Stream, playlist: "baseball_pipe.mlbtv.media
 
     return await _rewrite_playlist_core(
         stream, playlist, base_url,
+        cache_mode="strip",
         log_label="nuke",
-        track_key=False,
+        track_key=True,
         track_last_segment=False,
         guard_extinf_before_segment=False,
         on_cue_in=on_cue_in,
@@ -458,7 +489,7 @@ async def nuke_playlist_ads(stream: Stream, playlist: "baseball_pipe.mlbtv.media
     )
 
 
-async def fill_audio_playlist_ads(stream: Stream, playlist: "baseball_pipe.mlbtv.media_playlist.Playlist", base_url: str):
+async def fill_audio_playlist_ads(stream: MlbtvStream, playlist: "baseball_pipe.mlbtv.media_playlist.Playlist", base_url: str):
     name = playlist.get_name()
 
     def on_cue_in(template, line, rewritten):
@@ -490,6 +521,7 @@ async def fill_audio_playlist_ads(stream: Stream, playlist: "baseball_pipe.mlbtv
 
     return await _rewrite_playlist_core(
         stream, playlist, base_url,
+        cache_mode="fill",
         log_label="audio fill",
         track_key=True,
         guard_extinf_before_segment=True,
@@ -499,7 +531,7 @@ async def fill_audio_playlist_ads(stream: Stream, playlist: "baseball_pipe.mlbtv
     )
 
 
-async def fill_subtitle_playlist_ads(stream: Stream, playlist: "baseball_pipe.mlbtv.media_playlist.Playlist", base_url: str):
+async def fill_subtitle_playlist_ads(stream: MlbtvStream, playlist: "baseball_pipe.mlbtv.media_playlist.Playlist", base_url: str):
     name = playlist.get_name()
 
     def on_cue_in(template, line, rewritten):
@@ -533,6 +565,7 @@ async def fill_subtitle_playlist_ads(stream: Stream, playlist: "baseball_pipe.ml
 
     return await _rewrite_playlist_core(
         stream, playlist, base_url,
+        cache_mode="fill",
         log_label="subtitle fill",
         track_key=True,
         guard_extinf_before_segment=True,
@@ -542,7 +575,7 @@ async def fill_subtitle_playlist_ads(stream: Stream, playlist: "baseball_pipe.ml
     )
 
 
-async def fill_playlist_ads2(stream: Stream, playlist: "baseball_pipe.mlbtv.media_playlist.Playlist", base_url: str):
+async def fill_playlist_ads2(stream: MlbtvStream, playlist: "baseball_pipe.mlbtv.media_playlist.Playlist", base_url: str):
     name = playlist.get_name()
     rel_dir = gfs.rendition_str(playlist.resolution, playlist.frame_rate)
 
@@ -579,6 +612,7 @@ async def fill_playlist_ads2(stream: Stream, playlist: "baseball_pipe.mlbtv.medi
 
     return await _rewrite_playlist_core(
         stream, playlist, base_url,
+        cache_mode="fill",
         log_label="fill",
         track_key=True,
         guard_extinf_before_segment=True,

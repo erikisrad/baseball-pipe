@@ -13,7 +13,7 @@ import logging
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives import padding as sym_padding
 
-from baseball_pipe.mlbtv.stream import Stream
+from baseball_pipe.mlbtv.mlbtv_stream import MlbtvStream
 import baseball_pipe.mlbtv.media_playlist
 from baseball_pipe.playlist import filler as gfs
 
@@ -96,7 +96,7 @@ def prefix_master_urls(playlist, base_url):
     return "\n".join(lines)
 
 
-async def rewrite_media_playlist(stream:Stream, name:str, own_base:str):
+async def rewrite_media_playlist(stream:MlbtvStream, name:str, own_base:str):
 
     playlist:baseball_pipe.mlbtv.media_playlist.Playlist = await stream.get_variant(name)
     assert playlist, f"unknown playlist {name} for stream {stream}"
@@ -147,7 +147,7 @@ def determine_live_status(lines):
                 return "live"
 
 
-async def rewrite_playlist_only(stream:Stream, playlist:baseball_pipe.mlbtv.media_playlist.Playlist, base_url:str):
+async def rewrite_playlist_only(stream:MlbtvStream, playlist:baseball_pipe.mlbtv.media_playlist.Playlist, base_url:str):
     """Debug-only pass-through: rewrites segment/key URLs to point through
     our own proxy and otherwise copies the upstream playlist verbatim -- no
     ad-cue handling, no filler substitution, and critically no
@@ -212,7 +212,7 @@ async def rewrite_playlist_only(stream:Stream, playlist:baseball_pipe.mlbtv.medi
 
 
 
-async def nuke_playlist_ads(stream:Stream, playlist:baseball_pipe.mlbtv.media_playlist.Playlist, base_url:str):
+async def nuke_playlist_ads(stream:MlbtvStream, playlist:baseball_pipe.mlbtv.media_playlist.Playlist, base_url:str):
     func_start = time.perf_counter()
 
     name = playlist.get_name()
@@ -279,6 +279,11 @@ async def nuke_playlist_ads(stream:Stream, playlist:baseball_pipe.mlbtv.media_pl
 
                 rewritten.append(line)
 
+        # KEY
+        elif line.startswith("#EXT-X-KEY:"):
+            template.last_key = line
+            rewritten.append(uri_search_and_replace(line, base_url))
+
         # TIME CHECK
         elif start_time and template.stream_time and template.stream_time < start_time:
             continue
@@ -344,7 +349,7 @@ async def nuke_playlist_ads(stream:Stream, playlist:baseball_pipe.mlbtv.media_pl
     logger.info(f"rewrote nuke playlist in {elapsed_ms:.2f}ms (upstream fetch {fetch_ms:.2f}ms), {len(new_lines)} new lines processed, {len(rewritten)} total lines")
     return '\n'.join(rewritten)
 
-async def fill_audio_playlist_ads(stream:Stream, playlist:baseball_pipe.mlbtv.media_playlist.Playlist, base_url:str):
+async def fill_audio_playlist_ads(stream:MlbtvStream, playlist:baseball_pipe.mlbtv.media_playlist.Playlist, base_url:str):
     func_start = time.perf_counter()
 
     name = playlist.get_name()
@@ -532,7 +537,7 @@ async def fill_audio_playlist_ads(stream:Stream, playlist:baseball_pipe.mlbtv.me
     return '\n'.join(rewritten)
 
 
-async def fill_subtitle_playlist_ads(stream:Stream, playlist:baseball_pipe.mlbtv.media_playlist.Playlist, base_url:str):
+async def fill_subtitle_playlist_ads(stream:MlbtvStream, playlist:baseball_pipe.mlbtv.media_playlist.Playlist, base_url:str):
     func_start = time.perf_counter()
 
     name = playlist.get_name()
@@ -722,7 +727,7 @@ async def fill_subtitle_playlist_ads(stream:Stream, playlist:baseball_pipe.mlbtv
     return '\n'.join(rewritten)
 
 
-async def fill_playlist_ads2(stream:Stream, playlist:baseball_pipe.mlbtv.media_playlist.Playlist, base_url:str):
+async def fill_playlist_ads2(stream:MlbtvStream, playlist:baseball_pipe.mlbtv.media_playlist.Playlist, base_url:str):
     func_start = time.perf_counter()
     total_fetch_ms = 0
     total_fetches = 0

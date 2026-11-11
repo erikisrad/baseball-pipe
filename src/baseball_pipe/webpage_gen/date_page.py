@@ -4,6 +4,7 @@ import logging
 import os
 import baseball_pipe.misc.utilities as u
 import baseball_pipe.mlb.mlb_stats
+from baseball_pipe.webpage_gen.game_page import FILTER_KEYS
 
 logger = logging.getLogger(__name__)
 PACKAGE_ROOT = os.path.dirname(os.path.dirname(__file__))
@@ -37,7 +38,12 @@ async def serve_date(request):
 
         gamePK = u.safe_get(matches[index - 1], "gamePk", default=None)
         redirect_url = f"/{gamePK}"
-        extra = u.filter_query_string(request.query, {"index"})
+        exclude = {"index"}
+        if not any(request.query.get(k) for k in FILTER_KEYS):
+            # team is only useful as a tiebreaker alongside another filter on
+            # the game page -- forwarding it alone would just be inert noise
+            exclude.add("team")
+        extra = u.filter_query_string(request.query, exclude)
         if extra:
             redirect_url += f"?{extra}"
         return web.HTTPFound(redirect_url)

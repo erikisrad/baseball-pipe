@@ -14,6 +14,7 @@ import baseball_pipe.webpage_gen.game_page
 import baseball_pipe.server.router
 import baseball_pipe.webpage_gen.broadcast_page2
 import baseball_pipe.mlbtv.account2
+from baseball_pipe.standalone.stream_bucket import StreamBucket
 
 AT = " @ "
 SPC = "&nbsp;"
@@ -80,6 +81,7 @@ class WebServer:
 
         app["master_session"] = self.master_session
         app["mlbtv_account"] = self.mlbtv_account
+        app["stream_bucket"] = StreamBucket()
         app["proxy_url"] = self.proxy_url
 
     async def on_cleanup(self, app):

@@ -7,7 +7,7 @@ from baseball_pipe.misc import utilities as u
 from baseball_pipe.playlist import filler as gfs
 
 if TYPE_CHECKING:
-    from baseball_pipe.mlbtv.stream import Stream, StreamTemplate
+    from baseball_pipe.standalone.base_stream import BaseStream
 
 #VIDEO KINDA KEYS
 BANDWIDTH = "bandwidth"
@@ -34,13 +34,30 @@ SUBS = "SUBTITLES"
 
 logger = logging.getLogger(__name__)
 
+@dataclasses.dataclass
+class StreamTemplate():
+    line_count:int
+    playlist:list[str]
+    cued_out:bool # in ad break
+    stream_time:float # moving playlist timestamp
+    started_segments:bool # have we started writing segments yet
+
+    #used for playlist filling
+    ad_elapsed:float
+    expected_ad_duration:float
+    last_key:str
+    last_segment:str
+    filler_lines:list[str]
+    filler_elapsed:float
+    header:str
+
 class Playlist():
 
-    def __init__(self, stream: "Stream", name: str, media_dict:dict, template:"StreamTemplate"):
+    def __init__(self, stream: "BaseStream", name: str, media_dict:dict, templates:dict):
         self.parent_stream = stream
         self.name = name
         self.mdict = media_dict
-        self.template = template
+        self.templates = templates
 
         self._media = None
         self.type = None
@@ -80,13 +97,19 @@ class Playlist():
     def __repr__(self):
         return f"{self.parent_stream}/{self.name}"
 
-    def get_template(self):
-        return self.template
+    def get_template(self, mode_key="default"):
+        if mode_key not in self.templates:
+            self.templates[mode_key] = StreamTemplate(
+                line_count=0, playlist=[], cued_out=False, stream_time=None,
+                started_segments=False, ad_elapsed=0.0, expected_ad_duration=0.0,
+                last_key=None, last_segment=None, filler_lines=[], filler_elapsed=0.0, header=None)
+        return self.templates[mode_key]
 
-    def overwrite_template(self, template: "StreamTemplate"):
-        if template.line_count > self.template.line_count:
-            for field in dataclasses.fields(self.template):
-                setattr(self.template, field.name, getattr(template, field.name))
+    def overwrite_template(self, template: StreamTemplate, mode_key="default"):
+        current = self.templates[mode_key]
+        if template.line_count > current.line_count:
+            for field in dataclasses.fields(current):
+                setattr(current, field.name, getattr(template, field.name))
 
     def get_name(self):
         return self.name
@@ -100,10 +123,8 @@ class Playlist():
 
     async def _gen_media_playlist(self):
     
-        if not self.parent_stream._upstream_base_url:
-            await self.parent_stream._gen_master_playlist_url()
-
-        target = self.parent_stream._upstream_base_url + self.name
+        base_url = await self.parent_stream.get_upstream_base_url()
+        target = base_url + self.name
 
         headers = {
             **e.MEDIA_HEADER,

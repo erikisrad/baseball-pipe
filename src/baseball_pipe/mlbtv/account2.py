@@ -8,7 +8,7 @@ from curl_cffi.requests import AsyncSession
 
 import baseball_pipe.misc.utilities as u
 import baseball_pipe.misc.header_handler as e
-import baseball_pipe.mlbtv.stream
+import baseball_pipe.mlbtv.mlbtv_stream
 from baseball_pipe.mlbtv.token import Token
 
 logger = logging.getLogger(__name__)
@@ -63,7 +63,7 @@ class Account():
             await self._gen_token()
 
         if id not in self._streams.keys() or self._streams[id].is_expired():
-            self._streams[id] = baseball_pipe.mlbtv.stream.Stream(self._token, game_pk, media_id, self.session, self.proxy)
+            self._streams[id] = baseball_pipe.mlbtv.mlbtv_stream.MlbtvStream(self, game_pk, media_id, self.session, self.proxy)
             await self._streams[id].get_master_playlist_url()
 
         return self._streams[id]

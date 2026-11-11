@@ -2,12 +2,13 @@ import logging
 import aiohttp_jinja2
 from aiohttp import web
 
-from baseball_pipe.webpage_gen.game_page import serve_no_game
+from baseball_pipe.webpage_gen.game_page import serve_no_game, CONDENSED, RECAP
 import baseball_pipe.mlb.mlb_stats
 import baseball_pipe.misc.utilities as u
 from baseball_pipe.misc.header_handler import cors_headers
+from baseball_pipe.mlbtv.mlbtv_stream import MlbtvStream
 from baseball_pipe.mlbtv.account2 import Account
-from baseball_pipe.mlbtv.stream import Stream
+from baseball_pipe.standalone.stream_bucket import StreamBucket
 
 logger = logging.getLogger(__name__)
 
@@ -15,33 +16,44 @@ async def serve_broadcast(request):
 
     #META INFO
     gamePK = request.match_info.get("gamePK")
-    mediaId = request.match_info.get("mediaId")
+    mediaID = request.match_info.get("mediaId")
     local_tz = request.cookies.get("tz", "UTC")
     session = request.app["master_session"]
-    mlbtv_account: Account = request.app["mlbtv_account"]
+    bucket:StreamBucket = request.app["stream_bucket"]
     base_url = request.url.origin()
 
     #GAME
-    logger.info(f"fetching {gamePK}/{mediaId} broadcast page for {u.get_ip_from_request(request)}")
+    logger.info(f"fetching {gamePK}/{mediaID} broadcast page for {u.get_ip_from_request(request)}")
     game = await baseball_pipe.mlb.mlb_stats.get_game_content(gamePK, session)
 
     if not game:
         return serve_no_game(gamePK)
 
-    #BROADCAST INFO
-    broadcasts = game.get("broadcasts", [])
-    selected_broadcast = None
-    for broadcast in broadcasts:
-        if broadcast.get("mediaId", None) == mediaId:
-            selected_broadcast = broadcast
-            break
+    if mediaID.lower() == CONDENSED or mediaID.lower() == RECAP:
 
-    if not selected_broadcast:
-        return serve_no_broadcast(gamePK, mediaId)
+        if mediaID.lower() == CONDENSED:
+            broadcast_name = "Condensed Game"
+        elif mediaID.lower() == RECAP:
+            broadcast_name = "Daily Recap"
+        else:
+            return serve_no_broadcast(gamePK, mediaID)
+        cast_type = "video"
 
-    broadcast_name = u.safe_get(selected_broadcast, 'name', default=None)
-    broadcast_name = u.presenter_remover(broadcast_name)
-    cast_type = u.safe_get(selected_broadcast, 'type', default="Unknown")
+    else:
+        #BROADCAST INFO
+        broadcasts = game.get("broadcasts", [])
+        selected_broadcast = None
+        for broadcast in broadcasts:
+            if broadcast.get("mediaId", None) == mediaID:
+                selected_broadcast = broadcast
+                break
+
+        if not selected_broadcast:
+            return serve_no_broadcast(gamePK, mediaID)
+
+        broadcast_name = u.safe_get(selected_broadcast, 'name', default=None)
+        broadcast_name = u.presenter_remover(broadcast_name)
+        cast_type = u.safe_get(selected_broadcast, 'type', default="Unknown")
 
     #TEAM NAMES
     home_name = u.safe_get(game, "teams", "home", "team", "name", default="Unknown")
@@ -84,16 +96,20 @@ async def serve_broadcast(request):
         time_str = ""
 
     #STREAM
-    video_url = f"{base_url}/{gamePK}/{mediaId}/master.m3u8"
-    if request.query_string:
-        video_url += f"?{request.query_string}"
+    video_url = f"{base_url}/{gamePK}/{mediaID}/master.m3u8"
+    extra = u.filter_query_string(request.query, {"raw"})
+    if extra:
+        video_url += f"?{extra}"
+
+    if request.query.get("raw"):
+        return web.HTTPFound(video_url)
 
     error = None
     try:
-        stream: Stream = await mlbtv_account.get_stream(gamePK, mediaId)
+        stream = await bucket.get_stream(gamePK, mediaID, request)
         await stream.inititialize()
     except Exception as err:
-        logger.error(f"failed to get master playlist url for {gamePK}/{mediaId}: {err}")
+        logger.error(f"failed to get master playlist url for {gamePK}/{mediaID}: {err}")
         error = err
 
     response = aiohttp_jinja2.render_template("broadcast2.html", request, {
@@ -111,7 +127,7 @@ async def serve_broadcast(request):
     })
     response.headers.update(cors_headers())
 
-    logger.info(f"returning {gamePK}/{mediaId} broadcast page to {u.get_ip_from_request(request)}")
+    logger.info(f"returning {gamePK}/{mediaID} broadcast page to {u.get_ip_from_request(request)}")
 
     return response
 
