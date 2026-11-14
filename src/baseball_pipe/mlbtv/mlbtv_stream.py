@@ -62,15 +62,6 @@ class MlbtvStream(BaseStream):
     def __repr__(self):
         return f"{self.game_pk}/{self.media_id}"
 
-    async def get_master_playlist_url(self):
-        if not self._master_playlist_url:
-            await self._gen_master_playlist_url()
-        return self._master_playlist_url
-
-    async def get_master_playlist(self):
-        await self._gen_master_playlist()
-        return self._master_playlist
-
     async def get_start(self):
         if not self._start:
             self._start, self._end = await baseball_pipe.mlb.mlb_stats.get_game_start_end_times(self.game_pk, self.session)

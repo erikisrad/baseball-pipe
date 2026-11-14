@@ -67,6 +67,8 @@ class BaseStream(ABC):
         return self._master_playlist_url
 
     async def get_master_playlist(self):
+        if not self._master_playlist_url:
+            await self.inititialize()
         await self._gen_master_playlist()
         return self._master_playlist
 

@@ -1,0 +1,86 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Baseball Pipe - Query String Reference</title>
+        <link rel="stylesheet" href="/static/baseball_pipe.css">
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h2>Baseball Pipe</h2>
+                <p>Query String Reference</p>
+            </div>
+            <hr class="date-line">
+            <p><a href="/"><-- back</a></p>
+
+            <p><strong>Date page</strong> (/20260925)</p>
+            <ul>
+                <li>Append a team query string to filter directly to a game on that date.</li>
+                <ul>
+                    <li><a href="/20260925?team=cubs">baseballpipe.com/20260925?team=cubs</a></li>
+                </ul>
+                <li>Include an index if there's a double header and team matches more than one game.</li>
+                <ul>
+                    <li><a href="/20260925?team=cubs&index=2">baseballpipe.com/20260925?team=cubs&index=2</a></li>
+                </ul>
+                <li>The broadcast filters below (broadcast, type, side, state, language, availability) also work directly on a date URL, and carry through to the game they redirect to.</li>
+            </ul>
+            </br>
+
+            <p><strong>Game page</strong> (/825044)</p>
+            <ul>
+                <li>Specify the broadcaster name to jump directly to that broadcast.</li>
+                <ul>
+                    <li><a href="/825044?broadcast=reds.tv">baseballpipe.com/825044?broadcast=reds.tv</a></li>
+                </ul>
+                <li>Other filters are available: type, side, state, language, availability. These must be combined to narrow down to exactly one broadcast.</li>
+                <ul>
+                    <li><a href="/825044?type=tv&side=reds&language=english">baseballpipe.com/825044?type=tv&side=reds&language=english</a></li>
+                </ul>
+                <li>If more than one broadcast still matches, add a team query string as a tiebreaker.</li>
+                <ul>
+                    <li><a href="/825044?type=tv&team=cubs">baseballpipe.com/825044?type=tv&team=cubs</a></li>
+                </ul>
+                <li>Narrowing down to exactly one broadcast redirects straight to its broadcast page, carrying along any other query string.</li>
+            </ul>
+            </br>
+
+            <p><strong>Broadcast page</strong> (/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c)</p>
+            <ul>
+                <li>Add raw to skip the player page and redirect straight to the playable master.m3u8 URL. Any other query string on the page is carried along onto it.</li>
+                <ul>
+                    <li><a href="/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?raw=1">baseballpipe.com/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?raw=1</a></li>
+                </ul>
+            </ul>
+            </br>
+
+            <p><strong>Tune the broadcast</strong> (these work on the broadcast page, master.m3u8, and any rendition playlist underneath it)</p>
+            <ul>
+                <li>Force a specific resolution.</li>
+                <ul>
+                    <li><a href="/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?res=1920x1080">baseballpipe.com/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?res=1920x1080</a></li>
+                </ul>
+                <li>And/or an FPS.</li>
+                <ul>
+                    <li><a href="/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?fps=60">baseballpipe.com/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?fps=60</a></li>
+                </ul>
+                <li>If you just want the best quality, it's easier to just force the max bandwidth. min works too.</li>
+                <ul>
+                    <li><a href="/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?bw=max">baseballpipe.com/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?bw=max</a></li>
+                </ul>
+                <li>Control how ad breaks are handled: strip removes them entirely, fill replaces them with a silent countdown, none leaves them untouched. Left unset, VODs strip and live broadcasts fill automatically.</li>
+                <ul>
+                    <li><a href="/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?ad=strip">baseballpipe.com/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?ad=strip</a></li>
+                </ul>
+                <li>Point real segment and key URLs straight at the upstream CDN instead of proxying them through this server. Mostly useful for debugging; filler segments (used by ad=fill) always stay proxied since they only exist on this server.</li>
+                <ul>
+                    <li><a href="/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?direct=1">baseballpipe.com/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?direct=1</a></li>
+                </ul>
+            </ul>
+            </br>
+
+        </div>
+    </body>
+</html>

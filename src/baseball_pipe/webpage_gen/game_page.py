@@ -3,7 +3,6 @@ from string import Template
 import logging
 import os
 
-from numpy import short
 import baseball_pipe.misc.utilities as u
 import baseball_pipe.mlb.mlb_stats
 

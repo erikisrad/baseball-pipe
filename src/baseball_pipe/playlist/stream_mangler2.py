@@ -34,6 +34,14 @@ DEFAULT_PATTERN = re.compile(r'DEFAULT=YES')
 # (with whichever rendition is actually asking) on every read
 RENDITION_PLACEHOLDER = "{{RENDITION}}"
 FILLER_PLACEHOLDER = "{{FILLER}}"
+# real segment/key lines are built with this in place of the actual
+# base_url, so the cached template never bakes in a concrete URL -- one
+# cached playlist can then serve both a direct=1 request (upstream CDN)
+# and a normal one (our own proxy) for the same stream without a separate
+# cache entry for each. Swapped for the caller's real base_url only in the
+# final returned text; filler lines (always built from filler_base_url,
+# which never varies with direct=1) never contain this token at all.
+BASE_URL_PLACEHOLDER = "{{BASE_URL}}"
 
 DEBUG_DUMP_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "..", "test_files")
 
@@ -112,7 +120,7 @@ def prefix_master_urls(playlist, base_url, extra_query=None):
     return "\n".join(lines)
 
 
-async def rewrite_media_playlist(stream: MlbtvStream, name: str, own_base: str, ad_mode: str = None):
+async def rewrite_media_playlist(stream: MlbtvStream, name: str, own_base: str, ad_mode: str = None, direct: bool = False):
 
     playlist: baseball_pipe.mlbtv.media_playlist.Playlist = await stream.get_variant(name)
     assert playlist, f"unknown playlist {name} for stream {stream}"
@@ -122,47 +130,52 @@ async def rewrite_media_playlist(stream: MlbtvStream, name: str, own_base: str, 
         lines = playlist_media.split('\n')
         stream.set_live_status(determine_live_status(lines))
 
+    # real upstream segments/keys can point straight at the upstream CDN
+    # when direct=1 is requested; filler segments only exist on our own
+    # server regardless, so fill mode always keeps own_base for those
+    segment_base = await stream.get_upstream_base_url() if direct else own_base
+
     ad_mode = ad_mode.lower() if ad_mode else None
 
     if ad_mode == "strip":
-        return await nuke_playlist_ads(stream, playlist, own_base)
+        return await nuke_playlist_ads(stream, playlist, segment_base)
 
     if ad_mode == "none":
-        return await rewrite_playlist_only(stream, playlist, own_base)
+        return await rewrite_playlist_only(stream, playlist, segment_base)
 
     if ad_mode == "fill":
         if playlist.type == baseball_pipe.mlbtv.media_playlist.VIDEO:
-            return await fill_playlist_ads2(stream, playlist, own_base)
+            return await fill_playlist_ads2(stream, playlist, segment_base, filler_base_url=own_base)
         elif playlist.type == baseball_pipe.mlbtv.media_playlist.AUDIO:
-            return await fill_audio_playlist_ads(stream, playlist, own_base)
+            return await fill_audio_playlist_ads(stream, playlist, segment_base, filler_base_url=own_base)
         elif playlist.type == baseball_pipe.mlbtv.media_playlist.SUBS:
-            return await fill_subtitle_playlist_ads(stream, playlist, own_base)
+            return await fill_subtitle_playlist_ads(stream, playlist, segment_base, filler_base_url=own_base)
         else:
-            return await nuke_playlist_ads(stream, playlist, own_base)
+            return await nuke_playlist_ads(stream, playlist, segment_base)
 
     if ad_mode:
         logger.warning(f"unrecognized ad mode {ad_mode!r} for {stream}/{name}, falling back to automatic selection")
 
     if playlist.type == baseball_pipe.mlbtv.media_playlist.VIDEO:
         if stream.get_live_status() == "vod":
-            return await nuke_playlist_ads(stream, playlist, own_base)
+            return await nuke_playlist_ads(stream, playlist, segment_base)
         else:
-            return await fill_playlist_ads2(stream, playlist, own_base)
+            return await fill_playlist_ads2(stream, playlist, segment_base, filler_base_url=own_base)
 
     elif playlist.type == baseball_pipe.mlbtv.media_playlist.AUDIO:
         if stream.get_live_status() == "vod":
-            return await nuke_playlist_ads(stream, playlist, own_base)
+            return await nuke_playlist_ads(stream, playlist, segment_base)
         else:
-            return await fill_audio_playlist_ads(stream, playlist, own_base)
+            return await fill_audio_playlist_ads(stream, playlist, segment_base, filler_base_url=own_base)
 
     elif playlist.type == baseball_pipe.mlbtv.media_playlist.SUBS:
         if stream.get_live_status() == "vod":
-            return await nuke_playlist_ads(stream, playlist, own_base)
+            return await nuke_playlist_ads(stream, playlist, segment_base)
         else:
-            return await fill_subtitle_playlist_ads(stream, playlist, own_base)
+            return await fill_subtitle_playlist_ads(stream, playlist, segment_base, filler_base_url=own_base)
 
     else:
-        return await nuke_playlist_ads(stream, playlist, own_base)
+        return await nuke_playlist_ads(stream, playlist, segment_base)
 
 
 def determine_live_status(lines):
@@ -196,8 +209,9 @@ async def rewrite_playlist_only(stream: MlbtvStream, playlist: "baseball_pipe.ml
 
     name = playlist.get_name()
     rendition_id = name.rsplit('.', 1)[0]  # "823657-HD_7500K.m3u8" -> "823657-HD_7500K"
+    cache_mode = "none"
 
-    template = copy.deepcopy(playlist.get_template("none"))
+    template = copy.deepcopy(playlist.get_template(cache_mode))
     rewritten = [line.replace(RENDITION_PLACEHOLDER, rendition_id) for line in template.playlist]
 
     fetch_start = time.perf_counter()
@@ -213,13 +227,13 @@ async def rewrite_playlist_only(stream: MlbtvStream, playlist: "baseball_pipe.ml
             continue
 
         elif line.endswith(".ts") or line.endswith(".aac") or line.endswith(".vtt"):
-            rewritten.append(base_url + line)
+            rewritten.append(BASE_URL_PLACEHOLDER + line)
 
         elif "URI=" in line:
-            rewritten.append(uri_search_and_replace(line, base_url))
+            rewritten.append(uri_search_and_replace(line, BASE_URL_PLACEHOLDER))
 
         elif not line.startswith('#'):
-            rewritten.append(base_url + line)
+            rewritten.append(BASE_URL_PLACEHOLDER + line)
             logger.warning(f"unknown segment: {line} for {stream}/{name}")
 
         else:
@@ -228,13 +242,15 @@ async def rewrite_playlist_only(stream: MlbtvStream, playlist: "baseball_pipe.ml
             # discontinuities are ever inserted here.
             rewritten.append(line)
 
+    # base_url is never swapped in to begin with (see BASE_URL_PLACEHOLDER
+    # above), so the cached form is already placeholder-only
     template.playlist = [line.replace(rendition_id, RENDITION_PLACEHOLDER) for line in rewritten]
     template.line_count = len(lines)
-    playlist.overwrite_template(template, "none")
+    playlist.overwrite_template(template, cache_mode)
 
     elapsed_ms = (time.perf_counter() - func_start) * 1000
     logger.info(f"rewrote pass-through playlist in {elapsed_ms:.2f}ms (upstream fetch {fetch_ms:.2f}ms), {len(new_lines)} new lines processed, {len(rewritten)} total lines")
-    return '\n'.join(rewritten)
+    return '\n'.join(line.replace(BASE_URL_PLACEHOLDER, base_url) for line in rewritten)
 
 
 # ---------------------------------------------------------------------------
@@ -315,7 +331,7 @@ async def _rewrite_playlist_core(
         # KEY
         elif track_key and line.startswith("#EXT-X-KEY:"):
             template.last_key = line
-            rewritten.append(uri_search_and_replace(line, base_url))
+            rewritten.append(uri_search_and_replace(line, BASE_URL_PLACEHOLDER))
 
         # DATE TIME
         elif line.startswith("#EXT-X-PROGRAM-DATE-TIME:"):
@@ -388,14 +404,14 @@ async def _rewrite_playlist_core(
                     f.write('\n'.join(lines))
                 raise Exception(f"expected EXTINF before segment {line} for {stream}/{name}")
 
-            rewritten.append(base_url + line)
+            rewritten.append(BASE_URL_PLACEHOLDER + line)
 
         elif not line.startswith('#'):
-            rewritten.append(base_url + line)
+            rewritten.append(BASE_URL_PLACEHOLDER + line)
             logger.warning(f"unknown segment: {line} for {stream}/{name}")
 
         elif "URI=" in line:
-            rewritten.append(uri_search_and_replace(line, base_url))
+            rewritten.append(uri_search_and_replace(line, BASE_URL_PLACEHOLDER))
             logger.warning(f"unknown URI segment: {line} for {stream}/{name}")
 
         # MISC
@@ -414,7 +430,9 @@ async def _rewrite_playlist_core(
     # cache with this rendition's id (and, if given, the extra placeholder's
     # concrete value) swapped back out for its placeholder, so the next
     # rendition to ask (possibly a different one) can drop its own values
-    # in rather than inheriting this one's segment paths
+    # in rather than inheriting this one's segment paths. base_url is never
+    # swapped in to begin with (every real-content line above was built
+    # with BASE_URL_PLACEHOLDER directly), so it's already cache-ready.
     cached = [line.replace(rendition_id, RENDITION_PLACEHOLDER) for line in rewritten]
     if extra_placeholder:
         extra_value, extra_token = extra_placeholder
@@ -425,7 +443,7 @@ async def _rewrite_playlist_core(
 
     elapsed_ms = (time.perf_counter() - func_start) * 1000
     logger.info(f"rewrote {log_label} playlist in {elapsed_ms:.2f}ms (upstream fetch {fetch_ms:.2f}ms), {len(new_lines)} new lines processed, {len(rewritten)} total lines")
-    return '\n'.join(rewritten)
+    return '\n'.join(line.replace(BASE_URL_PLACEHOLDER, base_url) for line in rewritten)
 
 
 def _reset_ad_state(template):
@@ -489,7 +507,8 @@ async def nuke_playlist_ads(stream: MlbtvStream, playlist: "baseball_pipe.mlbtv.
     )
 
 
-async def fill_audio_playlist_ads(stream: MlbtvStream, playlist: "baseball_pipe.mlbtv.media_playlist.Playlist", base_url: str):
+async def fill_audio_playlist_ads(stream: MlbtvStream, playlist: "baseball_pipe.mlbtv.media_playlist.Playlist", base_url: str, filler_base_url: str = None):
+    filler_base_url = base_url if filler_base_url is None else filler_base_url
     name = playlist.get_name()
 
     def on_cue_in(template, line, rewritten):
@@ -497,7 +516,7 @@ async def fill_audio_playlist_ads(stream: MlbtvStream, playlist: "baseball_pipe.
         rewritten.append(line)
         rewritten.append("#EXT-X-DISCONTINUITY")
         if template.last_key:
-            rewritten.append(template.last_key)
+            rewritten.append(uri_search_and_replace(template.last_key, BASE_URL_PLACEHOLDER))
         _reset_ad_state(template)
 
     async def on_cue_out(template, line, rewritten):
@@ -513,7 +532,7 @@ async def fill_audio_playlist_ads(stream: MlbtvStream, playlist: "baseball_pipe.
         rewritten.append("#EXT-X-KEY:METHOD=NONE")  # disable encryption for filler segments
 
         ad_pts = await probe_last_segment_end_pts(stream, template.last_segment, template.last_key, probe=gfs.probe_audio_end_timestamp)
-        template.filler_lines = all_filler_audio(base_url, template.expected_ad_duration, ad_pts)
+        template.filler_lines = all_filler_audio(filler_base_url, template.expected_ad_duration, ad_pts)
 
     def on_ad_extinf(template, duration, rewritten):
         template.ad_elapsed += duration
@@ -531,7 +550,8 @@ async def fill_audio_playlist_ads(stream: MlbtvStream, playlist: "baseball_pipe.
     )
 
 
-async def fill_subtitle_playlist_ads(stream: MlbtvStream, playlist: "baseball_pipe.mlbtv.media_playlist.Playlist", base_url: str):
+async def fill_subtitle_playlist_ads(stream: MlbtvStream, playlist: "baseball_pipe.mlbtv.media_playlist.Playlist", base_url: str, filler_base_url: str = None):
+    filler_base_url = base_url if filler_base_url is None else filler_base_url
     name = playlist.get_name()
 
     def on_cue_in(template, line, rewritten):
@@ -539,7 +559,7 @@ async def fill_subtitle_playlist_ads(stream: MlbtvStream, playlist: "baseball_pi
         rewritten.append(line)
         rewritten.append("#EXT-X-DISCONTINUITY")
         if template.last_key:
-            rewritten.append(template.last_key)
+            rewritten.append(uri_search_and_replace(template.last_key, BASE_URL_PLACEHOLDER))
         _reset_ad_state(template)
 
     async def on_cue_out(template, line, rewritten):
@@ -557,7 +577,7 @@ async def fill_subtitle_playlist_ads(stream: MlbtvStream, playlist: "baseball_pi
         if not template.header:
             template.header = await probe_last_subtitle_header(stream, template.last_segment)
 
-        template.filler_lines = all_filler_subtitle(base_url, len(rewritten), template.header)
+        template.filler_lines = all_filler_subtitle(filler_base_url, len(rewritten), template.header)
 
     def on_ad_extinf(template, duration, rewritten):
         template.ad_elapsed += duration
@@ -575,7 +595,8 @@ async def fill_subtitle_playlist_ads(stream: MlbtvStream, playlist: "baseball_pi
     )
 
 
-async def fill_playlist_ads2(stream: MlbtvStream, playlist: "baseball_pipe.mlbtv.media_playlist.Playlist", base_url: str):
+async def fill_playlist_ads2(stream: MlbtvStream, playlist: "baseball_pipe.mlbtv.media_playlist.Playlist", base_url: str, filler_base_url: str = None):
+    filler_base_url = base_url if filler_base_url is None else filler_base_url
     name = playlist.get_name()
     rel_dir = gfs.rendition_str(playlist.resolution, playlist.frame_rate)
 
@@ -584,7 +605,7 @@ async def fill_playlist_ads2(stream: MlbtvStream, playlist: "baseball_pipe.mlbtv
         rewritten.append(line)
         rewritten.append("#EXT-X-DISCONTINUITY")
         if template.last_key:
-            rewritten.append(template.last_key)
+            rewritten.append(uri_search_and_replace(template.last_key, BASE_URL_PLACEHOLDER))
         _reset_ad_state(template)
 
     async def on_cue_out(template, line, rewritten):
@@ -604,7 +625,7 @@ async def fill_playlist_ads2(stream: MlbtvStream, playlist: "baseball_pipe.mlbtv
         fetch_ms = (time.perf_counter() - fetch_start) * 1000
         logger.info(f"fetched and decrypted {template.last_segment} in {fetch_ms:.2f}ms")
 
-        template.filler_lines = all_filler_no_killer2(base_url, playlist, template.expected_ad_duration, ad_pts)
+        template.filler_lines = all_filler_no_killer2(filler_base_url, playlist, template.expected_ad_duration, ad_pts)
 
     def on_ad_extinf(template, duration, rewritten):
         template.ad_elapsed += duration

@@ -31,7 +31,13 @@ async def serve_master_playlist(request: web.Request, stream: MlbtvStream):
     own_base = f"{request.url.origin()}/{gamePK}/{mediaId}/"
 
     ad_mode = request.query.get("ad")
-    extra_query = f"ad={ad_mode}" if ad_mode else None
+    direct_mode = request.query.get("direct")
+    extra_params = []
+    if ad_mode:
+        extra_params.append(f"ad={ad_mode}")
+    if direct_mode:
+        extra_params.append(f"direct={direct_mode}")
+    extra_query = "&".join(extra_params) if extra_params else None
     playlist = prefix_master_urls(playlist, own_base, extra_query=extra_query)
 
     serve_ms = (time.perf_counter() - serve_start) * 1000
@@ -112,7 +118,8 @@ async def serve_media_playlist(request: web.Request, stream: MlbtvStream, path: 
     mediaId = request.match_info.get("mediaId")
 
     own_base = f"{request.url.origin()}/{gamePK}/{mediaId}/"
-    playlist = await rewrite_media_playlist(stream, path, own_base, ad_mode=request.query.get("ad"))
+    direct = bool(request.query.get("direct"))
+    playlist = await rewrite_media_playlist(stream, path, own_base, ad_mode=request.query.get("ad"), direct=direct)
     
     serve_ms = (time.perf_counter() - serve_start) * 1000
     logger.info(f"served rewritten media playlist {path} in {serve_ms:.2f}ms, {len(playlist.splitlines())} total lines") 
