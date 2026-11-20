@@ -5,7 +5,7 @@ import baseball_pipe.misc.utilities as u
 
 logger = logging.getLogger(__name__)
 PACKAGE_ROOT = os.path.dirname(os.path.dirname(__file__))
-HOME_HTML = os.path.join(PACKAGE_ROOT, "html", "home.html")
+HOME_HTML = os.path.join(PACKAGE_ROOT, "html", "home2.html")
 
 async def serve_home(request):
     logger.info(f"returning home page to {u.get_ip_from_request(request)}")

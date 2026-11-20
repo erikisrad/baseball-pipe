@@ -1,0 +1,76 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Baseball Pipe</title>
+        <link rel="stylesheet" href="/static/baseball_pipe.css">
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h2>Baseball Pipe</h2>
+                <p>A website by Erik R.</p>
+            </div>
+            <hr class="date-line">
+
+            <p><strong>How it works</strong></p>
+            <p>Baseball Pipe is a web application that provides access to MLB game broadcasts and related media. The web GUI makes it easy to browse dates, games, and broadcasts &mdash; or skip straight past it with a query string, which makes it easy to pipe a broadcast into another application, such as VLC.</p>
+
+            <p><strong>A better way to watch</strong></p>
+            <ul>
+                <li>The full modern MLB broadcast catalog is available on demand.</li>
+                <li>VODs (non-live broadcasts) skip ad breaks.</li>
+                <li>Live games replace ads with a silent countdown until play resumes.</li>
+                <li>Chromecast support is available via a custom built receiver</li>
+                <li>Multiple audio options can be swapped in during video playback, including radio broadcasts and Spanish commentary.</li>
+                <li>Supports both adaptive stream quality or forced resolution / frame rate.</li>
+                <li>Many other quality of life features, like picture-in-picture, multi-language subtitles, etc!</li>
+            </ul>
+            </br>
+
+            <p><strong>Quick start</strong></p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>What?</th>
+                        <th>Where?</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td data-label="What">Today's games</td>
+                        <td data-label="Example"><a href="/today">baseballpipe.com/today</a></td>
+                    </tr>
+                    <tr>
+                        <td data-label="What">A specific date (YYYYMMDD)</td>
+                        <td data-label="Example"><a href="/20260925">baseballpipe.com/20260925</a></td>
+                    </tr>
+                    <tr>
+                        <td data-label="What">A team's game on that date</td>
+                        <td data-label="Example"><a href="/20260925?team=cubs">baseballpipe.com/20260925?team=cubs</a></td>
+                    </tr>
+                    <tr>
+                        <td data-label="What">A specific broadcast</td>
+                        <td data-label="Example"><a href="/20260822?team=cincinnati&broadcast=reds.tv">baseballpipe.com/20260822?team=cincinnati&broadcast=reds.tv</a></td>
+                    </tr>
+                    <tr>
+                        <td data-label="What">A less specific broadcast</td>
+                        <td data-label="Example"><a href="/20260822?team=reds&type=tv&language=english">baseballpipe.com/20260822?team=reds&type=tv&language=english</a></td>
+                    </tr>
+                    <tr>
+                        <td data-label="What">Only the best resoltion</td>
+                        <td data-label="Example"><a href="/20260925?team=cubs&type=tv&language=english&bw=max">baseballpipe.com/20260925?team=cubs&type=tv&language=english&bw=max</a></td>
+                    </tr>
+                    <tr>
+                        <td data-label="What">The raw stream, no HTML page</td>
+                        <td data-label="Example"><a href="/20260925?team=cubs&type=tv&language=english&raw=1">baseballpipe.com/20260925?team=cubs&type=tv&language=english&raw=1</a></td>
+                    </tr>
+                </tbody>
+            </table>
+            </br>
+
+            <p>Every query string above can be combined, and more are available. See the <a href="/readme">README</a> for the full query string guide.</p>
+        </div>
+    </body>
+</html>

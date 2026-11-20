@@ -9,11 +9,6 @@
   <cast-media-player></cast-media-player>
   <script>
     const context = cast.framework.CastReceiverContext.getInstance();
-
-    // Use Shaka Player's JS-level HLS parsing/demuxing instead of
-    // cast_shell's native pipeline, to avoid whatever the native pipeline
-    // mishandles at the ad-break discontinuity boundary (B-frame/non-B-frame
-    // GOP structure switching across #EXT-X-DISCONTINUITY).
     const options = new cast.framework.CastReceiverOptions();
     options.useShakaForHls = true;
 

@@ -5,6 +5,9 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>Baseball Pipe - Query String Reference</title>
         <link rel="stylesheet" href="/static/baseball_pipe.css">
+        <style>
+            td:nth-child(3) { white-space: nowrap; overflow-x: auto; }
+        </style>
     </head>
     <body>
         <div class="container">
@@ -13,74 +16,138 @@
                 <p>Query String Reference</p>
             </div>
             <hr class="date-line">
+            
+            <p>Query strings can be combined on a single URL, and most are forwarded automatically through redirects: a <strong>team</strong>/<strong>index</strong> match on the date page carries any game-page filters along with it, and a resolved broadcast match carries <strong>raw</strong>, <strong>ad</strong>, <strong>direct</strong>, <strong>res</strong>, <strong>fps</strong>, and <strong>bw</strong> on to the stream itself.</p>
+            </br>
+            <p><strong>Date page</strong> &mdash; /{YYYYMMDD}</p>
+            <p>The filters below narrow down the list of games on a given day. If one game remains after filtering, the page will redirect to that game. If filters not resolve to a single game, the game at the first index is returned.</p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Parameter</th>
+                        <th>Description</th>
+                        <th>Example</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td data-label="Parameter"><strong>team</strong></td>
+                        <td data-label="Description">Filters the date page to the game featuring the named team. Should be a substring specific enough to match only one team name: 'cubs' is fine, 'chicago' is ambiguous.</td>
+                        <td data-label="Example"><a href="/20260925?team=cubs">?team=cubs</a></td>
+                    </tr>
+                    <tr>
+                        <td data-label="Parameter"><strong>index</strong></td>
+                        <td data-label="Description">Selects the Nth game, using one-based indexing and ordered by start time. When combined with the team filter, it can be useful for filtering around doubleheaders.</td>
+                        <td data-label="Example"><a href="/20260925?team=cubs&index=2">?team=cubs&index=2</a></td>
+                    </tr>
+                </tbody>
+            </table>
+            </br>
+
+            <p><strong>Game page</strong> &mdash; /{gamePK}</p>
+            <p>The filters below narrow down the list of broadcasts for a game. Combine multiple filters until exactly one broadcast remains. Once the filters define only one broadcast, the page redirects to that broadcast.</p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Parameter</th>
+                        <th>Description</th>
+                        <th>Example</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td data-label="Parameter"><strong>team</strong></td>
+                        <td data-label="Description">Can be carried over from the date page to work as a tie breaker when filtering on the game page.</td>
+                        <td data-label="Example"><a href="/825044?team=reds&type=tv">?type=tv&team=reds</a></td>
+                    </tr>
+                    <tr>
+                        <td data-label="Parameter"><strong>broadcast</strong></td>
+                        <td data-label="Description">Substring filter on the broadcast's display name (announcer or network), e.g. 'espn' or 'reds.tv'.</td>
+                        <td data-label="Example"><a href="/825044?broadcast=reds.tv">?broadcast=reds.tv</a></td>
+                    </tr>
+                    <tr>
+                        <td data-label="Parameter"><strong>type</strong></td>
+                        <td data-label="Description">Filters by broadcast type, e.g. 'tv' or 'fm'.</td>
+                        <td data-label="Example"><a href="/825044?type=tv">?type=tv</a></td>
+                    </tr>
+                    <tr>
+                        <td data-label="Parameter"><strong>side</strong></td>
+                        <td data-label="Description">Filters by home/away, or by a team name/abbreviation.</td>
+                        <td data-label="Example"><a href="/825044?side=home">?side=home</a></td>
+                    </tr>
+                    <tr>
+                        <td data-label="Parameter"><strong>flip</strong></td>
+                        <td data-label="Description">Inverts the side resolved by side= or by the team=, picking the opposing side's broadcast instead. Useful for watching the opposition's broadcast of your own team's game.</td>
+                        <td data-label="Example"><a href="/825044?type=tv&side=reds&flip=1">?type=tv&side=reds&flip=1</a></td>
+                    </tr>
+                    <tr>
+                        <td data-label="Parameter"><strong>state</strong></td>
+                        <td data-label="Description">Filters by the broadcast's status text, usually 'live' or 'archive'.</td>
+                        <td data-label="Example"><a href="/825044?type=tv&side=reds&state=archive">?type=tv&side=reds&state=archive</a></td>
+                    </tr>
+                    <tr>
+                        <td data-label="Parameter"><strong>language</strong></td>
+                        <td data-label="Description">Filters by broadcast language.</td>
+                        <td data-label="Example"><a href="/825044?language=spanish">?language=spanish</a></td>
+                    </tr>
+                    <tr>
+                        <td data-label="Parameter"><strong>availability</strong></td>
+                        <td data-label="Description">Filters by the broadcast's availability text, e.g. 'out' for out of market games and 'in' for in market games.</td>
+                        <td data-label="Example"><a href="/825044?side=reds&availability=in">?side=reds&availability=in</a></td>
+                    </tr>
+                </tbody>
+            </table>
+            </br>
+
+            <p><strong>Broadcast page &amp; stream</strong> &mdash; /{gamePK}/{mediaId} and the .m3u8 URLs underneath it</p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Parameter</th>
+                        <th>Description</th>
+                        <th>Example</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td data-label="Parameter"><strong>raw</strong></td>
+                        <td data-label="Description">Skips the HTML player page and redirects straight to the broadcast's master.m3u8 stream URL.</td>
+                        <td data-label="Example"><a href="/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?raw=1">?raw=1</a></td>
+                    </tr>
+                    <tr>
+                        <td data-label="Parameter"><strong>ad</strong></td>
+                        <td data-label="Description">Ad-handling mode for the stream: strip removes ad breaks entirely, none leaves them in untouched, fill replaces them with filler video/audio/subtitles. Omitted means automatic: strip for VODs, fill for live games.</td>
+                        <td data-label="Example"><a href="/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?ad=fill">?ad=fill</a></td>
+                    </tr>
+                    <tr>
+                        <td data-label="Parameter"><strong>direct</strong></td>
+                        <td data-label="Description">Points segment and key URLs at the real upstream CDN instead of proxying them through this server. Will only work outside of a web browser because of CORS headers. If you are able to use this, it will lower your stream latency and save me bandwidth costs, a win/win!</td>
+                        <td data-label="Example"><a href="/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?direct=1">?direct=1</a></td>
+                    </tr>
+                    <tr>
+                        <td data-label="Parameter"><strong>res</strong></td>
+                        <td data-label="Description">Restricts the master playlist to a specific resolution. Common options are 320x180, 384x216, 512x288, 640x360, 896x504, 960x540, 1280x720, and 1920x1080.</td>
+                        <td data-label="Example"><a href="/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?res=1920x1080">?res=1920x1080</a></td>
+                    </tr>
+                    <tr>
+                        <td data-label="Parameter"><strong>fps</strong></td>
+                        <td data-label="Description">Restricts the master playlist to a specific frame rate. Common options are 30 and 60.</td>
+                        <td data-label="Example"><a href="/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?fps=60">?fps=60</a></td>
+                    </tr>
+                    <tr>
+                        <td data-label="Parameter"><strong>bw</strong></td>
+                        <td data-label="Description">Restricts the master playlist to its highest (max) or lowest (min) bandwidth variant. This is the easiest way to force the best overall quality.</td>
+                        <td data-label="Example"><a href="/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?bw=max">?bw=max</a></td>
+                    </tr>
+                    <tr>
+                        <td data-label="Parameter"><strong>tsoffset</strong></td>
+                        <td data-label="Description">Advanced/internal. A timestamp offset in seconds applied to filler segments and subtitles for continuity with a livestream. Set automatically by the player itself and not meant for users.</td>
+                        <td data-label="Example">filler_003.ts?tsoffset=12.5</td>
+                    </tr>
+                </tbody>
+            </table>
+            </br>
             <p><a href="/"><-- back</a></p>
-
-            <p><strong>Date page</strong> (/20260925)</p>
-            <ul>
-                <li>Append a team query string to filter directly to a game on that date.</li>
-                <ul>
-                    <li><a href="/20260925?team=cubs">baseballpipe.com/20260925?team=cubs</a></li>
-                </ul>
-                <li>Include an index if there's a double header and team matches more than one game.</li>
-                <ul>
-                    <li><a href="/20260925?team=cubs&index=2">baseballpipe.com/20260925?team=cubs&index=2</a></li>
-                </ul>
-                <li>The broadcast filters below (broadcast, type, side, state, language, availability) also work directly on a date URL, and carry through to the game they redirect to.</li>
-            </ul>
-            </br>
-
-            <p><strong>Game page</strong> (/825044)</p>
-            <ul>
-                <li>Specify the broadcaster name to jump directly to that broadcast.</li>
-                <ul>
-                    <li><a href="/825044?broadcast=reds.tv">baseballpipe.com/825044?broadcast=reds.tv</a></li>
-                </ul>
-                <li>Other filters are available: type, side, state, language, availability. These must be combined to narrow down to exactly one broadcast.</li>
-                <ul>
-                    <li><a href="/825044?type=tv&side=reds&language=english">baseballpipe.com/825044?type=tv&side=reds&language=english</a></li>
-                </ul>
-                <li>If more than one broadcast still matches, add a team query string as a tiebreaker.</li>
-                <ul>
-                    <li><a href="/825044?type=tv&team=cubs">baseballpipe.com/825044?type=tv&team=cubs</a></li>
-                </ul>
-                <li>Narrowing down to exactly one broadcast redirects straight to its broadcast page, carrying along any other query string.</li>
-            </ul>
-            </br>
-
-            <p><strong>Broadcast page</strong> (/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c)</p>
-            <ul>
-                <li>Add raw to skip the player page and redirect straight to the playable master.m3u8 URL. Any other query string on the page is carried along onto it.</li>
-                <ul>
-                    <li><a href="/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?raw=1">baseballpipe.com/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?raw=1</a></li>
-                </ul>
-            </ul>
-            </br>
-
-            <p><strong>Tune the broadcast</strong> (these work on the broadcast page, master.m3u8, and any rendition playlist underneath it)</p>
-            <ul>
-                <li>Force a specific resolution.</li>
-                <ul>
-                    <li><a href="/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?res=1920x1080">baseballpipe.com/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?res=1920x1080</a></li>
-                </ul>
-                <li>And/or an FPS.</li>
-                <ul>
-                    <li><a href="/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?fps=60">baseballpipe.com/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?fps=60</a></li>
-                </ul>
-                <li>If you just want the best quality, it's easier to just force the max bandwidth. min works too.</li>
-                <ul>
-                    <li><a href="/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?bw=max">baseballpipe.com/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?bw=max</a></li>
-                </ul>
-                <li>Control how ad breaks are handled: strip removes them entirely, fill replaces them with a silent countdown, none leaves them untouched. Left unset, VODs strip and live broadcasts fill automatically.</li>
-                <ul>
-                    <li><a href="/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?ad=strip">baseballpipe.com/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?ad=strip</a></li>
-                </ul>
-                <li>Point real segment and key URLs straight at the upstream CDN instead of proxying them through this server. Mostly useful for debugging; filler segments (used by ad=fill) always stay proxied since they only exist on this server.</li>
-                <ul>
-                    <li><a href="/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?direct=1">baseballpipe.com/825044/a80d5e23-ea32-4a02-8aeb-ba11069b049c?direct=1</a></li>
-                </ul>
-            </ul>
-            </br>
-
         </div>
     </body>
 </html>
