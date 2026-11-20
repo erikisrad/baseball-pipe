@@ -13,16 +13,6 @@ logger = logging.getLogger(__name__)
 
 
 async def with_timeout(coro, timeout, description):
-    """Bounds an upstream fetch with a hard outer deadline.
-
-    aiohttp's own ClientTimeout should normally catch a hung request, but a
-    connection that's accepted and then goes silent partway through a proxied
-    HTTPS tunnel (seen in practice with the Bright Data proxy) hasn't reliably
-    tripped it -- a request can sit forever past any configured sock_read/
-    total value. asyncio.wait_for cancels the task from the outside instead,
-    which doesn't depend on aiohttp's internal timer wiring working correctly
-    for that case.
-    """
     try:
         return await asyncio.wait_for(coro, timeout=timeout)
     except asyncio.TimeoutError:

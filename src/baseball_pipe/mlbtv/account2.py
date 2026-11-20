@@ -18,8 +18,6 @@ CLIENT_ID = "0oap7wa857jcvPlZ5355" # i think this is mlb.com's id - probably lia
 
 TOKEN_URL = "https://ids.mlb.com/oauth2/aus1m088yK07noBfh356/v1/token"
 
-# keep in sync with header_handler.USER_AGENT / SEC_CH_UA so the TLS fingerprint
-# and the HTTP headers claim the same Chrome version
 IMPERSONATE = "chrome142"
 
 class Account():

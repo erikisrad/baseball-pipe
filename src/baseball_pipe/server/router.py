@@ -32,16 +32,9 @@ async def route_media(request: web.Request):
     mediaID = request.match_info.get("mediaId")
     path = request.match_info.get("path")
 
-    # this route has no format constraint on gamePK/mediaId, so browser
-    # noise like Chrome DevTools' /.well-known/appspecific/... probe matches
-    # it too (gamePK=".well-known", mediaId="appspecific") -- reject it
-    # before wasting a real upstream MLB API call on a bogus mediaId
     if gamePK == ".well-known":
         return web.HTTPNotFound()
 
-    # filler segments are served straight from local disk, not proxied
-    # through the upstream MLB stream, so this needs to short-circuit before
-    # any of the stream/upstream-fetching logic below
     if path.startswith("filler/audio/"):
         return await media_handler.serve_filler_audio(request, path)
     if path.startswith("filler/subtitle/"):
@@ -71,12 +64,12 @@ async def serve_johnnysucks(request: web.Request):
 
 async def serve_options(request: web.Request):
     return web.Response(
-        status=204, # "No Content", standard for a preflight response
+        status=204,
         headers={
             "Access-Control-Allow-Origin": "*",
             "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
             "Access-Control-Allow-Headers": "Content-Type, Range, Authorization, X-Requested-With",
             "Access-Control-Max-Age": "86400",
-            "Access-Control-Expose-Headers": "Content-Length, Content-Range", # lets the player read these for seeking
+            "Access-Control-Expose-Headers": "Content-Length, Content-Range",
         }
     )

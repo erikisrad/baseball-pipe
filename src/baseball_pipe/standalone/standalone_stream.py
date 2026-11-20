@@ -11,12 +11,6 @@ logger = logging.getLogger(__name__)
 
 
 class StandaloneStream(BaseStream):
-    """Wraps a single already-public HLS master playlist URL -- e.g. an
-    MLB.com Condensed Game / Daily Recap clip from mlb-cuts-diamond.mlb.com.
-    No login, token, or GraphQL session needed: the URL is playable as-is,
-    so this only has to fetch/parse/proxy it, not negotiate it.
-    """
-
     def __init__(self,
                  gamePK: str,
                  media_id: str,

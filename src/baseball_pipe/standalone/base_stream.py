@@ -12,19 +12,6 @@ logger = logging.getLogger(__name__)
 
 
 class BaseStream(ABC):
-    """Shared shape + shared mechanics for anything that proxies a single
-    HLS master playlist through this app -- a real, token-gated MLB.TV
-    broadcast (Stream) or an already-public clip (StandaloneStream).
-    Subclasses only need to say *how* their master playlist URL gets
-    resolved and *when* it's considered stale; parsing the master
-    playlist's variants and fetching segments is identical either way, so
-    those live here instead of being duplicated per subclass.
-
-    Every subclass is expected to maintain: self.session, self.proxy,
-    self._master_playlist_url, self._upstream_base_url, self._master_playlist,
-    self._variants, self._live_status.
-    """
-
     session: aiohttp.ClientSession
     proxy: str
 
@@ -102,11 +89,6 @@ class BaseStream(ABC):
         if not self._master_playlist:
             await self._gen_master_playlist()
 
-        # one shared dict of templates (keyed by cache mode, created lazily
-        # by Playlist.get_template()) across every video bitrate, so ABR
-        # switching keeps its ad-break tracking regardless of which
-        # bitrate is currently selected; each audio/subtitle alternate
-        # gets its own independent dict, same as it always has
         video_templates = {}
         self._variants = {}
 

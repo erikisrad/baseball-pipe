@@ -25,6 +25,15 @@ def verify_signed_cookie(raw: str) -> bool:
 
     return hmac.compare_digest(sig, expected)
 
+def is_authenticated(request) -> bool:
+    raw = request.cookies.get("auth")
+    return bool(raw) and verify_signed_cookie(raw)
+
+def require_auth(request, response):
+    if not is_authenticated(request):
+        return web.HTTPFound("/login")
+    return response
+
 async def login(request):
 
     if request.method == "GET":

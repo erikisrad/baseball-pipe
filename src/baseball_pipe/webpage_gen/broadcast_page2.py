@@ -9,6 +9,7 @@ from baseball_pipe.misc.header_handler import cors_headers
 from baseball_pipe.mlbtv.mlbtv_stream import MlbtvStream
 from baseball_pipe.mlbtv.account2 import Account
 from baseball_pipe.standalone.stream_bucket import StreamBucket
+from baseball_pipe.webpage_gen.login_page import require_auth
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,7 @@ async def serve_broadcast(request):
     game = await baseball_pipe.mlb.mlb_stats.get_game_content(gamePK, session)
 
     if not game:
-        return serve_no_game(gamePK)
+        return require_auth(request, serve_no_game(gamePK))
 
     if mediaID.lower() == CONDENSED or mediaID.lower() == RECAP:
 
@@ -36,7 +37,7 @@ async def serve_broadcast(request):
         elif mediaID.lower() == RECAP:
             broadcast_name = "Daily Recap"
         else:
-            return serve_no_broadcast(gamePK, mediaID)
+            return require_auth(request, serve_no_broadcast(gamePK, mediaID))
         cast_type = "video"
 
     else:
@@ -49,7 +50,7 @@ async def serve_broadcast(request):
                 break
 
         if not selected_broadcast:
-            return serve_no_broadcast(gamePK, mediaID)
+            return require_auth(request, serve_no_broadcast(gamePK, mediaID))
 
         broadcast_name = u.safe_get(selected_broadcast, 'name', default=None)
         broadcast_name = u.presenter_remover(broadcast_name)
@@ -129,7 +130,7 @@ async def serve_broadcast(request):
 
     logger.info(f"returning {gamePK}/{mediaID} broadcast page to {u.get_ip_from_request(request)}")
 
-    return response
+    return require_auth(request, response)
 
 def serve_no_broadcast(gamePK, mediaId):
     logger.warning(f"no broadcast found for: {gamePK}/{mediaId}")

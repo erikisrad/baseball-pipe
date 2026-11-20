@@ -13,16 +13,15 @@ body {
 .video-js {
     display: block;
     margin: 0 auto;
-    width: 100% !important;   /* Force it to fill the container */
+    width: 100% !important;
     max-width: 900px;
-    aspect-ratio: 16 / 9;      /* Maintains the shape */
+    aspect-ratio: 16 / 9;
     background-color: #000;
-    height: auto !important;   /* Let aspect-ratio handle the height */
-    border-radius: 4px;        /* Matches your table's aesthetic */
+    height: auto !important;
+    border-radius: 4px;
     overflow: hidden;
 }
 
-/* Ensure the internal video element fills the new wrapper */
 .video-js video {
     position: relative;
     object-fit: contain;
@@ -103,20 +102,20 @@ audio {
 
 .variant-columns {
     display: flex;
-    gap: 40px;        /* space between columns */
+    gap: 40px;
     margin-top: 10px;
 }
 
 .variant-columns .vc {
     display: flex;
     flex-direction: column;
-    gap: 6px;         /* space between links */
+    gap: 6px;
 }
 
 .dl {
     display: block;
-    font-family: monospace;   /* keeps your alignment */
-    white-space: pre;         /* preserves spacing */
+    font-family: monospace;
+    white-space: pre;
 }
 
 
@@ -286,16 +285,14 @@ td {
     }
 }
 
-/* --- Login Page Additions --- */
-
 .login-wrapper {
     text-align: center;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: flex-start;   /* start at the top */
-    min-height: 100vh;             /* full viewport height */
-    padding-top: 25vh;             /* push content down 25% */
+    justify-content: flex-start;
+    min-height: 100vh;
+    padding-top: 25vh;
 }
 
 

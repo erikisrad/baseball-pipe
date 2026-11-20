@@ -5,6 +5,7 @@ import os
 import baseball_pipe.misc.utilities as u
 import baseball_pipe.mlb.mlb_stats
 from baseball_pipe.webpage_gen.game_page import FILTER_KEYS
+from baseball_pipe.webpage_gen.login_page import require_auth
 
 logger = logging.getLogger(__name__)
 PACKAGE_ROOT = os.path.dirname(os.path.dirname(__file__))
@@ -20,7 +21,7 @@ async def serve_date(request):
     try:
         date = u.get_date(start_date=date_str)
     except ValueError:
-        return serve_no_date(date_str)
+        return require_auth(request, serve_no_date(date_str))
     
     games = await baseball_pipe.mlb.mlb_stats.get_games_on_date(start_date=date, session=session, broadcasts=True)
 
@@ -30,18 +31,16 @@ async def serve_date(request):
         try:
             index = int(index_query) if index_query else 1
         except ValueError:
-            return serve_no_team_match(date_str, team_query, index_query)
+            return require_auth(request, serve_no_team_match(date_str, team_query, index_query))
 
         matches = match_games_by_team(games, team_query)
         if index < 1 or index > len(matches):
-            return serve_no_team_match(date_str, team_query, index_query)
+            return require_auth(request, serve_no_team_match(date_str, team_query, index_query))
 
         gamePK = u.safe_get(matches[index - 1], "gamePk", default=None)
         redirect_url = f"/{gamePK}"
         exclude = {"index"}
         if not any(request.query.get(k) for k in FILTER_KEYS):
-            # team is only useful as a tiebreaker alongside another filter on
-            # the game page -- forwarding it alone would just be inert noise
             exclude.add("team")
         extra = u.filter_query_string(request.query, exclude)
         if extra:
@@ -62,9 +61,9 @@ async def serve_date(request):
 
     logger.info(f"returning {date_str} date page to {u.get_ip_from_request(request)}")
 
-    return web.Response(text=html, content_type="text/html", headers={
+    return require_auth(request, web.Response(text=html, content_type="text/html", headers={
             "Access-Control-Allow-Origin": "*"
-    })
+    }))
 
 def generate_games_table(games, tz):
     table = ""

@@ -5,6 +5,7 @@ import os
 
 import baseball_pipe.misc.utilities as u
 import baseball_pipe.mlb.mlb_stats
+from baseball_pipe.webpage_gen.login_page import require_auth
 
 logger = logging.getLogger(__name__)
 PACKAGE_ROOT = os.path.dirname(os.path.dirname(__file__))
@@ -23,7 +24,7 @@ async def serve_game(request):
     game = await baseball_pipe.mlb.mlb_stats.get_game_content(gamePK, session)
     
     if not game:
-        return serve_no_game(gamePK)
+        return require_auth(request, serve_no_game(gamePK))
 
     #TEAM NAMES
     home_name = u.safe_get(game, "teams", "home", "team", "name", default="Unknown")
@@ -80,27 +81,28 @@ async def serve_game(request):
 
     filters = {k: request.query.get(k) for k in FILTER_KEYS if request.query.get(k)}
     team_query = request.query.get("team")
+    flip = bool(request.query.get("flip"))
 
     if filters:
-        matches = [b for b in broadcasts if broadcast_matches(b, game, short, filters)]
+        matches = [b for b in broadcasts if broadcast_matches(b, game, short, filters, flip)]
 
         if team_query and len(matches) > 1:
-            narrowed = [b for b in matches if side_matches(u.safe_get(b, 'homeAway', default=''), team_query, game, short)]
+            narrowed = [b for b in matches if side_matches(u.safe_get(b, 'homeAway', default=''), team_query, game, short) != flip]
             if narrowed:
                 matches = narrowed
 
         if len(matches) == 1:
             media_id = u.safe_get(matches[0], 'mediaId', default=None)
             if not media_id:
-                return serve_no_broadcast_match(gamePK, filters, team_query)
+                return require_auth(request, serve_no_broadcast_match(gamePK, filters, team_query))
             redirect_url = f"/{gamePK}/{media_id}"
-            extra = u.filter_query_string(request.query, set(FILTER_KEYS) | {"team"})
+            extra = u.filter_query_string(request.query, set(FILTER_KEYS) | {"team", "flip"})
             if extra:
                 redirect_url += f"?{extra}"
             return web.HTTPFound(redirect_url)
 
         if len(matches) != 1:
-            return serve_no_broadcast_match(gamePK, filters, team_query)
+            return require_auth(request, serve_no_broadcast_match(gamePK, filters, team_query))
 
     if broadcasts or supplemental:
         broadcast_html = construct_broadcasts(broadcasts, gamePK, short, supplemental)
@@ -123,17 +125,17 @@ async def serve_game(request):
     
     logger.info(f"returning {gamePK} game page to {u.get_ip_from_request(request)}")
 
-    return web.Response(text=html, content_type="text/html", headers={
+    return require_auth(request, web.Response(text=html, content_type="text/html", headers={
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Headers": "*"
-    })
+    }))
 
 def serve_no_game(gamePK):
 
     logger.warning(f"no game found for: {gamePK}")
     return web.Response(text=f"This isn't a valid gamePK: {gamePK}\nTry again", status=400)
 
-def broadcast_matches(broadcast, game, short, filters):
+def broadcast_matches(broadcast, game, short, filters, flip=False):
     name = u.presenter_remover(u.safe_get(broadcast, 'name', default='') or '')
     checks = {
         "broadcast": name,
@@ -149,7 +151,7 @@ def broadcast_matches(broadcast, game, short, filters):
 
     side_query = filters.get("side")
     side = u.safe_get(broadcast, 'homeAway', default='')
-    if side_query and not side_matches(side, side_query, game, short):
+    if side_query and side_matches(side, side_query, game, short) == flip:
         return False
 
     return True

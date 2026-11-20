@@ -36,13 +36,15 @@ async def auth_middleware(request, handler):
 
         return await handler(request)
 
-    raw = request.cookies.get("auth")
-    if not raw:
-        logger.info(f"sending redirect to login for {request.remote} {path}")
-        return web.HTTPFound("/login")
+    if request.query.get("raw") and request.match_info.handler in (
+        baseball_pipe.webpage_gen.date_page.serve_date,
+        baseball_pipe.webpage_gen.game_page.serve_game,
+        baseball_pipe.webpage_gen.broadcast_page2.serve_broadcast,
+    ):
+        return await handler(request)
 
-    if not baseball_pipe.webpage_gen.login_page.verify_signed_cookie(raw):
-        logger.warning(f"sending bad cookie redirect to login for {request.remote} {path}")
+    if not baseball_pipe.webpage_gen.login_page.is_authenticated(request):
+        logger.info(f"sending redirect to login for {request.remote} {path}")
         return web.HTTPFound("/login")
 
     return await handler(request)
@@ -64,17 +66,10 @@ class WebServer:
         await setup_remotes(app, XForwardedRelaxed())
         app.middlewares.append(auth_middleware)
 
-        # aiohttp's own default (total=300, sock_connect=30, sock_read=None)
-        # leaves sock_read unbounded -- a connection that's accepted but then
-        # silently produces nothing (seen going through the Bright Data
-        # proxy) can hang well past any sane request lifetime. Bound all
-        # three explicitly so every request using this session -- stats API,
-        # media-gateway, playlists, segments -- fails fast instead of hanging.
         self.master_session = aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(total=60, sock_connect=10, sock_read=30)
         )
-        # curl_cffi's AsyncSession already defaults timeout=30 internally --
-        # made explicit here so it's not relying on an invisible library default.
+
         self.auth_session = AsyncSession(timeout=30)
 
         self.mlbtv_account = baseball_pipe.mlbtv.account2.Account(self.master_session, self.auth_session, proxy=self.proxy_url)
@@ -97,14 +92,12 @@ class WebServer:
         self.app.on_startup.append(self.on_startup)
         self.app.on_cleanup.append(self.on_cleanup)
 
-        # CORS preflight, catch-all
         self.app.router.add_route("OPTIONS", "/{tail:.*}", baseball_pipe.server.router.serve_options)
 
         self.app.router.add_get("/favicon.ico", baseball_pipe.server.router.serve_favicon)
         self.app.router.add_get("/robots.txt", baseball_pipe.server.router.serve_robots)
         self.app.router.add_get("/johnnysucks", baseball_pipe.server.router.serve_johnnysucks)
 
-        # Named keyword routes
         self.app.router.add_get("/", baseball_pipe.webpage_gen.home_page.serve_home)
         self.app.router.add_get("/readme", baseball_pipe.webpage_gen.readme_page.serve_readme)
         self.app.router.add_get("/today", baseball_pipe.server.router.serve_today)
@@ -112,7 +105,6 @@ class WebServer:
         self.app.router.add_get("/tomorrow", baseball_pipe.server.router.serve_tomorrow)
         self.app.router.add_route("*", "/login", baseball_pipe.webpage_gen.login_page.login)
 
-        # Regex-constrained path params (aiohttp supports this natively)
         self.app.router.add_get(r"/{date:\d{8}}", baseball_pipe.webpage_gen.date_page.serve_date)
         self.app.router.add_get(r"/{gamePK:\d{1,6}}", baseball_pipe.webpage_gen.game_page.serve_game)
         self.app.router.add_get("/{gamePK}/{mediaId}", baseball_pipe.webpage_gen.broadcast_page2.serve_broadcast)
