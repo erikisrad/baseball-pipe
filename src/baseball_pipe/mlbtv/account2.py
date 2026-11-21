@@ -26,8 +26,8 @@ class Account():
                  session:aiohttp.ClientSession,
                  auth_session:AsyncSession,
                  proxy:str,
-                 u:str=os.environ["u"],
-                 p:str=os.environ["p"]):
+                 u:str=os.environ["bbp_user"],
+                 p:str=os.environ["bbp_pass"]):
 
         self.u = u
         self.p = p

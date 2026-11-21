@@ -6,8 +6,8 @@ import hmac, hashlib, secrets
 
 logger = logging.getLogger(__name__)
 
-SECRET = os.environ["secret"]
-PASSWORD = os.environ["auth"]
+SECRET = os.environ["bbp_secret"]
+PASSWORD = os.environ["bbp_auth"]
 PACKAGE_ROOT = os.path.dirname(os.path.dirname(__file__))
 LOGIN_HTML = os.path.join(PACKAGE_ROOT, "html", "login.html")
 

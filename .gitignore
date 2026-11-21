@@ -1,5 +1,6 @@
 .vscode
 .claude
+setup.txt
 __pycache__
 *secret*
 *m3u8*
